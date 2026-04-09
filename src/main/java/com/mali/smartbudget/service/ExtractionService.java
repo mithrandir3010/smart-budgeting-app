@@ -13,16 +13,22 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
 
 /**
- * PDF ekstreden işlem (Transaction) verilerini LLM aracılığıyla ayıklayan servis.
+ * PDF ekstreden işlem (Transaction) verilerini LLM aracılığıyla ayıklayan ve kaydeden servis.
  *
- * <p>Akış: PDF → PdfService (ham metin) → LLM prompt → JSON → TransactionDto[] → Transaction[]
- * <p>OPENAI_API_KEY ayarlanmamışsa otomatik olarak Mock Mode'a geçer.
+ * <p>Akış: PDF → PdfService → LLM → JSON → TransactionDto[] → Transaction[] → DB
+ *
+ * <p>OPENAI_API_KEY ayarlanmamışsa Mock Mode devreye girer.
+ *
+ * <p>Tasarım notu: extractAndMap() hem ayıklamayı hem kaydetmeyi tek @Transactional
+ * boundary içinde yapar. Böylece userRepository.findById() ile yüklenen User entity'si
+ * saveAll() çağrısına kadar managed (yönetilen) kalır — detached entity hatası oluşmaz.
  */
 @Slf4j
 @Service
@@ -31,7 +37,6 @@ public class ExtractionService {
 
     private static final String DEFAULT_API_KEY = "your-api-key-here";
 
-    // 3 gerçekçi örnek harcama — Mock Mode'da döndürülür
     private static final String MOCK_JSON = """
             [
               {"date": "2026-04-01", "description": "Migros Market", "amount": 245.90, "category": "Market", "currency": "TRY"},
@@ -61,75 +66,100 @@ public class ExtractionService {
             %s
             """;
 
-    // @Value non-final olmalı — Lombok @RequiredArgsConstructor yalnızca final alanları kapsar
+    // @Value non-final — Lombok @RequiredArgsConstructor yalnızca final alanları işler
     @Value("${langchain4j.open-ai.chat-model.api-key:" + DEFAULT_API_KEY + "}")
     private String openAiApiKey;
 
     private final ChatLanguageModel chatLanguageModel;
     private final PdfService pdfService;
     private final UserRepository userRepository;
+    private final TransactionService transactionService;
     private final ObjectMapper objectMapper;
 
+    /**
+     * Anahtar gerçek bir OpenAI key'i değilse Mock Mode aktif olur.
+     * Geçersiz sayılan değerler: null, boş string, varsayılan placeholder,
+     * "sk-" ile başlamayan her değer (gerçek OpenAI keyleri "sk-" ile başlar).
+     */
     private boolean isMockMode() {
-        return DEFAULT_API_KEY.equals(openAiApiKey);
+        if (openAiApiKey == null || openAiApiKey.isBlank()) return true;
+        if (DEFAULT_API_KEY.equals(openAiApiKey)) return true;
+        if (!openAiApiKey.startsWith("sk-")) return true;
+        return false;
     }
 
     /**
      * PDF dosyasını okur; Mock Mode'da sahte JSON, aksi hâlde LLM yanıtı döner.
      */
     public String extractTransactionsAsJson(MultipartFile file) throws IOException {
+        log.info(">>> Gelen Key: '{}', Mock Mode Aktif mi: {}", openAiApiKey, isMockMode());
+
         if (isMockMode()) {
-            log.warn("MOCK MODE: Sahte harcamalar üretiliyor — gerçek OPENAI_API_KEY ayarlanmamış.");
+            log.warn("[1/4] MOCK MODE: Sahte harcamalar üretiliyor — OpenAI key geçerli değil.");
             return MOCK_JSON;
         }
 
         String rawText = pdfService.extractText(file);
-        log.info("PDF okundu. Karakter sayısı: {}", rawText.length());
+        log.info("[1/4] PDF okundu. Karakter sayısı: {}", rawText.length());
 
         String prompt = String.format(PROMPT_TEMPLATE, rawText);
-        log.info("LLM isteği gönderiliyor...");
+        log.info("[2/4] LLM isteği gönderiliyor...");
 
         String jsonResponse = chatLanguageModel.generate(prompt);
-        log.info("LLM yanıtı alındı. Yanıt uzunluğu: {} karakter", jsonResponse.length());
+        log.info("[2/4] LLM yanıtı alındı. Yanıt uzunluğu: {} karakter", jsonResponse.length());
 
         return jsonResponse;
     }
 
     /**
-     * LLM yanıtını parse ederek kullanıcıya bağlı Transaction listesine dönüştürür.
-     * JSON parse hatası oluşursa anlamlı bir IllegalArgumentException fırlatır.
+     * PDF'ten harcamaları ayıklar, veritabanına kaydeder ve kaydedilen listeyi döner.
+     *
+     * <p>Tüm adımlar tek @Transactional boundary içinde çalışır:
+     * User entity yüklendiği andan saveAll() bitene kadar managed kalır.
      *
      * @param file   Kullanıcının yüklediği PDF ekstre dosyası
      * @param userId Sahip kullanıcının ID'si
-     * @return Kaydedilmeye hazır Transaction listesi
+     * @return Veritabanına kaydedilmiş Transaction listesi
      */
+    @Transactional
     public List<Transaction> extractAndMap(MultipartFile file, Long userId) throws IOException {
+
+        // Adım 1 — Kullanıcıyı yükle (bu session boyunca managed kalacak)
+        log.info("[1/4] Kullanıcı yükleniyor. userId={}", userId);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Kullanıcı bulunamadı: " + userId));
+        log.info("[1/4] Kullanıcı bulundu: {}", user.getEmail());
 
+        // Adım 2 — JSON al (Mock ya da LLM)
+        log.info("[2/4] JSON ayıklama başlıyor...");
         String json = extractTransactionsAsJson(file);
 
-        // LLM bazen yanıtı ```json ... ``` bloğu içinde döner — temizle
+        // LLM bazen ```json ... ``` bloğu içinde döner — temizle
         String cleanJson = json.trim()
                 .replaceAll("(?s)^```json\\s*", "")
                 .replaceAll("(?s)^```\\s*", "")
                 .replaceAll("```$", "")
                 .trim();
+        log.info("[2/4] JSON temizlendi. İlk 100 karakter: {}",
+                cleanJson.substring(0, Math.min(100, cleanJson.length())));
 
-        log.debug("Parse edilecek JSON:\n{}", cleanJson);
-
+        // Adım 3 — JSON → TransactionDto[]
+        log.info("[3/4] JSON parse ediliyor...");
         List<TransactionDto> dtos;
         try {
             dtos = objectMapper.readValue(cleanJson, new TypeReference<>() {});
         } catch (JsonProcessingException e) {
-            log.error("LLM yanıtı geçerli bir JSON değil:\n{}", cleanJson);
+            log.error("[3/4] JSON parse hatası. Gelen metin:\n{}", cleanJson);
             throw new IllegalArgumentException(
-                    "LLM geçerli bir JSON döndürmedi. Lütfen tekrar deneyin. Detay: " + e.getOriginalMessage(), e);
+                    "LLM geçerli bir JSON döndürmedi. Detay: " + e.getOriginalMessage(), e);
         }
+        log.info("[3/4] Parse tamamlandı. {} DTO oluşturuldu.", dtos.size());
 
+        // Adım 4 — TransactionDto → Transaction entity (managed User ile aynı transaction'da)
+        log.info("[4/4] Transaction entity'leri oluşturuluyor ve kaydediliyor...");
         List<Transaction> transactions = dtos.stream()
                 .map(dto -> Transaction.builder()
-                        .user(user)
+                        .user(user)          // managed — aynı @Transactional içinde yüklendi
                         .date(dto.date())
                         .description(dto.description())
                         .amount(dto.amount())
@@ -138,7 +168,10 @@ public class ExtractionService {
                         .build())
                 .toList();
 
-        log.info("{} adet Transaction oluşturuldu.", transactions.size());
-        return transactions;
+        // saveAllTransactions() REQUIRED propagation ile bu transaction'a katılır
+        List<Transaction> saved = transactionService.saveAllTransactions(transactions);
+        log.info("[4/4] {} adet Transaction başarıyla kaydedildi.", saved.size());
+
+        return saved;
     }
 }

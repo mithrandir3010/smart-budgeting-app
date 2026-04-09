@@ -2,7 +2,6 @@ package com.mali.smartbudget.controller;
 
 import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.service.ExtractionService;
-import com.mali.smartbudget.service.TransactionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -21,19 +20,18 @@ import java.util.List;
 @RequiredArgsConstructor
 public class StatementController {
 
+    // extractAndMap() artık kaydetmeyi de kendi @Transactional'ı içinde yapıyor.
+    // Ayrıca TransactionService enjekte etmeye gerek yok.
     private final ExtractionService extractionService;
-    private final TransactionService transactionService;
 
     /**
-     * PDF ekstre dosyasını alır, LLM ile işlemlerini ayıklar ve veritabanına kaydeder.
+     * PDF ekstre yükler, harcamaları ayıklar ve veritabanına kaydeder.
      *
      * <pre>
      * POST /api/v1/statements/upload
      * Content-Type: multipart/form-data
-     *
-     * Parametreler:
-     *   file   — PDF ekstre dosyası
-     *   userId — Dosyanın sahibi kullanıcının ID'si
+     *   file   — PDF dosyası
+     *   userId — Kullanıcı ID'si
      * </pre>
      */
     @PostMapping("/upload")
@@ -49,16 +47,19 @@ public class StatementController {
 
         List<Transaction> saved;
         try {
-            List<Transaction> transactions = extractionService.extractAndMap(file, userId);
-            saved = transactionService.saveAllTransactions(transactions);
+            // extractAndMap: ayıklama + kayıt tek atomik transaction'da
+            saved = extractionService.extractAndMap(file, userId);
         } catch (IOException e) {
-            log.error("PDF işlenirken hata oluştu: {}", e.getMessage(), e);
+            log.error("PDF işlenirken hata: {}", e.getMessage(), e);
             return ResponseEntity.unprocessableEntity()
                     .body("PDF okunamadı: " + e.getMessage());
         } catch (IllegalArgumentException e) {
-            log.error("JSON parse hatası: {}", e.getMessage());
+            log.error("Veri ayıklama hatası: {}", e.getMessage());
             return ResponseEntity.unprocessableEntity()
                     .body("İşlem verileri ayıklanamadı: " + e.getMessage());
+        } catch (jakarta.persistence.EntityNotFoundException e) {
+            log.error("Kullanıcı bulunamadı: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
 
         String message = "Başarıyla işlendi. %d işlem veritabanına kaydedildi.".formatted(saved.size());
