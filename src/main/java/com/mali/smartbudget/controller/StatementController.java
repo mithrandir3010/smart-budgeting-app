@@ -55,6 +55,10 @@ public class StatementController {
             log.error("PDF işlenirken hata oluştu: {}", e.getMessage(), e);
             return ResponseEntity.unprocessableEntity()
                     .body("PDF okunamadı: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            log.error("JSON parse hatası: {}", e.getMessage());
+            return ResponseEntity.unprocessableEntity()
+                    .body("İşlem verileri ayıklanamadı: " + e.getMessage());
         }
 
         String message = "Başarıyla işlendi. %d işlem veritabanına kaydedildi.".formatted(saved.size());

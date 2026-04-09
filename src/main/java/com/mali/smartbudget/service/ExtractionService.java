@@ -1,5 +1,6 @@
 package com.mali.smartbudget.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mali.smartbudget.dto.TransactionDto;
@@ -10,6 +11,7 @@ import dev.langchain4j.model.chat.ChatLanguageModel;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,16 +22,23 @@ import java.util.List;
  * PDF ekstreden işlem (Transaction) verilerini LLM aracılığıyla ayıklayan servis.
  *
  * <p>Akış: PDF → PdfService (ham metin) → LLM prompt → JSON → TransactionDto[] → Transaction[]
+ * <p>OPENAI_API_KEY ayarlanmamışsa otomatik olarak Mock Mode'a geçer.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ExtractionService {
 
-    private final ChatLanguageModel chatLanguageModel;
-    private final PdfService pdfService;
-    private final UserRepository userRepository;
-    private final ObjectMapper objectMapper;
+    private static final String DEFAULT_API_KEY = "your-api-key-here";
+
+    // 3 gerçekçi örnek harcama — Mock Mode'da döndürülür
+    private static final String MOCK_JSON = """
+            [
+              {"date": "2026-04-01", "description": "Migros Market", "amount": 245.90, "category": "Market", "currency": "TRY"},
+              {"date": "2026-04-03", "description": "Starbucks Kahve", "amount": 89.50, "category": "Kafe", "currency": "TRY"},
+              {"date": "2026-04-05", "description": "Kira Ödemesi", "amount": 12000.00, "category": "Kira", "currency": "TRY"}
+            ]
+            """;
 
     private static final String PROMPT_TEMPLATE = """
             Aşağıdaki ekstre metnindeki harcamaları tarih, açıklama ve tutar olarak ayıkla \
@@ -52,10 +61,28 @@ public class ExtractionService {
             %s
             """;
 
+    // @Value non-final olmalı — Lombok @RequiredArgsConstructor yalnızca final alanları kapsar
+    @Value("${langchain4j.open-ai.chat-model.api-key:" + DEFAULT_API_KEY + "}")
+    private String openAiApiKey;
+
+    private final ChatLanguageModel chatLanguageModel;
+    private final PdfService pdfService;
+    private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
+
+    private boolean isMockMode() {
+        return DEFAULT_API_KEY.equals(openAiApiKey);
+    }
+
     /**
-     * PDF dosyasını okur, LLM'e gönderir ve ham JSON yanıtını döner.
+     * PDF dosyasını okur; Mock Mode'da sahte JSON, aksi hâlde LLM yanıtı döner.
      */
     public String extractTransactionsAsJson(MultipartFile file) throws IOException {
+        if (isMockMode()) {
+            log.warn("MOCK MODE: Sahte harcamalar üretiliyor — gerçek OPENAI_API_KEY ayarlanmamış.");
+            return MOCK_JSON;
+        }
+
         String rawText = pdfService.extractText(file);
         log.info("PDF okundu. Karakter sayısı: {}", rawText.length());
 
@@ -69,7 +96,8 @@ public class ExtractionService {
     }
 
     /**
-     * LLM'den gelen JSON yanıtını parse ederek kullanıcıya bağlı Transaction listesine dönüştürür.
+     * LLM yanıtını parse ederek kullanıcıya bağlı Transaction listesine dönüştürür.
+     * JSON parse hatası oluşursa anlamlı bir IllegalArgumentException fırlatır.
      *
      * @param file   Kullanıcının yüklediği PDF ekstre dosyası
      * @param userId Sahip kullanıcının ID'si
@@ -90,7 +118,14 @@ public class ExtractionService {
 
         log.debug("Parse edilecek JSON:\n{}", cleanJson);
 
-        List<TransactionDto> dtos = objectMapper.readValue(cleanJson, new TypeReference<>() {});
+        List<TransactionDto> dtos;
+        try {
+            dtos = objectMapper.readValue(cleanJson, new TypeReference<>() {});
+        } catch (JsonProcessingException e) {
+            log.error("LLM yanıtı geçerli bir JSON değil:\n{}", cleanJson);
+            throw new IllegalArgumentException(
+                    "LLM geçerli bir JSON döndürmedi. Lütfen tekrar deneyin. Detay: " + e.getOriginalMessage(), e);
+        }
 
         List<Transaction> transactions = dtos.stream()
                 .map(dto -> Transaction.builder()
