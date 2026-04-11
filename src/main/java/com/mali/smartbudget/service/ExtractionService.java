@@ -155,8 +155,10 @@ public class ExtractionService {
         }
         log.info("[3/4] Parse tamamlandı. {} DTO oluşturuldu.", dtos.size());
 
-        // Adım 4 — TransactionDto → Transaction entity (managed User ile aynı transaction'da)
-        log.info("[4/4] Transaction entity'leri oluşturuluyor ve kaydediliyor...");
+        // Adım 4 — Eski verileri temizle, ardından yenilerini kaydet
+        log.info("[4/4] Kullanıcıya ait eski transaction'lar siliniyor. userId={}", userId);
+        transactionService.deleteAllByUserId(userId);
+        log.info("[4/4] Eski veriler silindi. Transaction entity'leri oluşturuluyor ve kaydediliyor...");
         List<Transaction> transactions = dtos.stream()
                 .map(dto -> Transaction.builder()
                         .user(user)          // managed — aynı @Transactional içinde yüklendi

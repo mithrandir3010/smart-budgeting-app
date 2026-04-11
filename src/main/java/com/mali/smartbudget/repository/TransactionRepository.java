@@ -15,6 +15,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     List<Transaction> findByStatementId(Long statementId);
 
+    void deleteAllByUserId(Long userId);
+
     @Query("SELECT t.category, SUM(t.amount) FROM Transaction t WHERE t.user.id = :userId GROUP BY t.category")
     List<Object[]> findCategoryTotals(@Param("userId") Long userId);
 }

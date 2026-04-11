@@ -15,6 +15,11 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
 
     @Transactional
+    public void deleteAllByUserId(Long userId) {
+        transactionRepository.deleteAllByUserId(userId);
+    }
+
+    @Transactional
     public List<Transaction> saveAllTransactions(List<Transaction> transactions) {
         return transactionRepository.saveAll(transactions);
     }

@@ -1,7 +1,10 @@
 package com.mali.smartbudget.controller;
 
 import com.mali.smartbudget.dto.AnalyticsSummaryDto;
+import com.mali.smartbudget.dto.TransactionDto;
+import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.service.AnalyticsService;
+import com.mali.smartbudget.service.TransactionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -10,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/analytics")
@@ -17,29 +22,21 @@ import org.springframework.web.bind.annotation.RestController;
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
+    private final TransactionService transactionService;
 
-    /**
-     * Kullanıcının harcama özetini döner.
-     *
-     * <pre>
-     * GET /api/v1/analytics/summary?userId=1
-     *
-     * Yanıt:
-     * {
-     *   "totalSpending": 12335.40,
-     *   "categoryBreakdown": {
-     *     "Market": 245.90,
-     *     "Kafe": 89.50,
-     *     "Kira": 12000.00
-     *   },
-     *   "warning": "Dikkat: Aylık harcamanız 12335.40 TL ile 10.000 TL limitini aştı!"
-     * }
-     * </pre>
-     */
     @GetMapping("/summary")
     public ResponseEntity<AnalyticsSummaryDto> getSummary(@RequestParam Long userId) {
         log.info("Analiz isteği alındı. userId={}", userId);
-        AnalyticsSummaryDto summary = analyticsService.getSummary(userId);
-        return ResponseEntity.ok(summary);
+        return ResponseEntity.ok(analyticsService.getSummary(userId));
+    }
+
+    @GetMapping("/transactions")
+    public ResponseEntity<List<TransactionDto>> getTransactions(@RequestParam Long userId) {
+        log.info("İşlem listesi isteği alındı. userId={}", userId);
+        List<TransactionDto> dtos = transactionService.getTransactionsByUser(userId)
+                .stream()
+                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency()))
+                .toList();
+        return ResponseEntity.ok(dtos);
     }
 }

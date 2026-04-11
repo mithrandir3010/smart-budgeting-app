@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(mvn compile:*)"
+      "Bash(mvn compile:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(curl:*)",
+      "Bash(./mvnw compile:*)",
+      "Bash(ls /home/mali/Desktop/smart-budgeting-app/*.xml /home/mali/Desktop/smart-budgeting-app/mvn*)"
     ]
   }
 }
