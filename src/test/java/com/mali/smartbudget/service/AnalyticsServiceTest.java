@@ -12,6 +12,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -22,25 +23,8 @@ class AnalyticsServiceTest {
 
     private static final Long USER_ID = 1L;
 
-    @Mock
-    private TransactionRepository transactionRepository;
-
-    @InjectMocks
-    private AnalyticsService analyticsService;
-
-    // -------------------------------------------------------------------------
-    // Yardımcılar: veritabanı satırlarını temsil eden List<Object[]> oluşturur
-    // -------------------------------------------------------------------------
-    private Object[] row(String category, String amount) {
-        return new Object[]{category, new BigDecimal(amount)};
-    }
-
-    @SafeVarargs
-    private List<Object[]> rows(Object[]... entries) {
-        List<Object[]> list = new ArrayList<>();
-        for (Object[] entry : entries) list.add(entry);
-        return list;
-    }
+    @Mock  private TransactionRepository transactionRepository;
+    @InjectMocks private AnalyticsService analyticsService;
 
     // =========================================================================
     // Toplam harcama ve kategori dökümü
@@ -56,6 +40,7 @@ class AnalyticsServiceTest {
         assertThat(result.totalSpending()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(result.categoryBreakdown()).isEmpty();
         assertThat(result.warning()).isNull();
+        assertThat(result.monthlyBudget()).isEqualByComparingTo("10000.00");
     }
 
     @Test
@@ -89,15 +74,12 @@ class AnalyticsServiceTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Harcama tam limitte (10.000 TL) — uyarı tetiklenmez (limit aşılmadı)")
+    @DisplayName("Harcama tam limitte (10.000 TL) — uyarı tetiklenmez")
     void getSummary_spendingExactlyAtLimit_noWarning() {
         when(transactionRepository.findCategoryTotals(USER_ID))
                 .thenReturn(rows(row("Kira", "10000.00")));
 
-        AnalyticsSummaryDto result = analyticsService.getSummary(USER_ID);
-
-        // compareTo > 0 koşulu, tam eşitlikte false döner → uyarı yok
-        assertThat(result.warning()).isNull();
+        assertThat(analyticsService.getSummary(USER_ID).warning()).isNull();
     }
 
     @Test
@@ -130,9 +112,7 @@ class AnalyticsServiceTest {
         when(transactionRepository.findCategoryTotals(USER_ID))
                 .thenReturn(rows(row("Kafe", "350.00")));
 
-        AnalyticsSummaryDto result = analyticsService.getSummary(USER_ID);
-
-        assertThat(result.warning()).isNull();
+        assertThat(analyticsService.getSummary(USER_ID).warning()).isNull();
     }
 
     // =========================================================================
@@ -145,9 +125,7 @@ class AnalyticsServiceTest {
         when(transactionRepository.findCategoryTotals(USER_ID))
                 .thenReturn(rows(row(null, "200.00")));
 
-        AnalyticsSummaryDto result = analyticsService.getSummary(USER_ID);
-
-        assertThat(result.categoryBreakdown()).containsKey("Diğer");
+        assertThat(analyticsService.getSummary(USER_ID).categoryBreakdown()).containsKey("Diğer");
     }
 
     @Test
@@ -160,5 +138,112 @@ class AnalyticsServiceTest {
         assertThat(result.totalSpending()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(result.categoryBreakdown()).isEmpty();
         assertThat(result.warning()).isNull();
+    }
+
+    // =========================================================================
+    // computeDailyRate
+    // =========================================================================
+
+    @Test
+    @DisplayName("Sıfır harcamada günlük oran sıfır döner")
+    void computeDailyRate_zeroSpending_returnsZero() {
+        assertThat(analyticsService.computeDailyRate(BigDecimal.ZERO, 10))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("dayOfMonth sıfır veya negatifse günlük oran sıfır döner")
+    void computeDailyRate_zeroDayOfMonth_returnsZero() {
+        assertThat(analyticsService.computeDailyRate(new BigDecimal("5000"), 0))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("Ayın 10'unda 5.000 TL harcanmışsa günlük oran 500 TL'dir")
+    void computeDailyRate_day10_5000Spent_returns500() {
+        assertThat(analyticsService.computeDailyRate(new BigDecimal("5000.00"), 10))
+                .isEqualByComparingTo("500.00");
+    }
+
+    // =========================================================================
+    // buildCoachAdvice
+    // =========================================================================
+
+    @Test
+    @DisplayName("Harcama yoksa 'veri yok' mesajı döner")
+    void buildCoachAdvice_noSpending_returnsNoDataMessage() {
+        String advice = analyticsService.buildCoachAdvice(
+                BigDecimal.ZERO, Map.of(), BigDecimal.ZERO, 10
+        );
+        assertThat(advice).contains("yok");
+    }
+
+    @Test
+    @DisplayName("Tahmini harcama limiti aşıyorsa tavsiye aşım yüzdesini içerir")
+    void buildCoachAdvice_projectedOverLimit_containsOveragePercent() {
+        // Projected = 20.000 TL → %100 aşım
+        String advice = analyticsService.buildCoachAdvice(
+                new BigDecimal("6666.67"),
+                Map.of("Market", new BigDecimal("6666.67")),
+                new BigDecimal("20000.00"),
+                10
+        );
+        assertThat(advice).contains("Market");
+        assertThat(advice).contains("aşacaksın");
+    }
+
+    @Test
+    @DisplayName("Tahmini harcama limit altındaysa pozitif mesaj döner")
+    void buildCoachAdvice_projectedUnderLimit_returnsPositiveMessage() {
+        String advice = analyticsService.buildCoachAdvice(
+                new BigDecimal("2000.00"),
+                Map.of("Market", new BigDecimal("2000.00")),
+                new BigDecimal("6000.00"),
+                10
+        );
+        assertThat(advice).contains("altında");
+        assertThat(advice).contains("Market");
+    }
+
+    @Test
+    @DisplayName("Kira sabit kategori olarak tavsiyeye dahil edilmez")
+    void buildCoachAdvice_onlyFixedCategories_adviceExcludesKira() {
+        // Sadece Kira var — değişken kategori yok
+        String advice = analyticsService.buildCoachAdvice(
+                new BigDecimal("12000.00"),
+                Map.of("Kira", new BigDecimal("12000.00")),
+                new BigDecimal("36000.00"),
+                10
+        );
+        // Kira adı aşım tavsiyesinde "kısarsan" kalıbında geçmemeli
+        assertThat(advice).doesNotContain("Kira\" harcamandan");
+    }
+
+    @Test
+    @DisplayName("getSummary yanıtı projectedSpending ve dailyRate alanlarını içerir")
+    void getSummary_returnsProjectionFields() {
+        when(transactionRepository.findCategoryTotals(USER_ID))
+                .thenReturn(rows(row("Market", "3000.00")));
+
+        AnalyticsSummaryDto result = analyticsService.getSummary(USER_ID);
+
+        assertThat(result.projectedSpending()).isNotNull().isGreaterThan(BigDecimal.ZERO);
+        assertThat(result.dailyRate()).isNotNull().isGreaterThan(BigDecimal.ZERO);
+        assertThat(result.coachAdvice()).isNotNull().isNotBlank();
+    }
+
+    // =========================================================================
+    // Yardımcılar
+    // =========================================================================
+
+    private Object[] row(String category, String amount) {
+        return new Object[]{category, new BigDecimal(amount)};
+    }
+
+    @SafeVarargs
+    private List<Object[]> rows(Object[]... entries) {
+        List<Object[]> list = new ArrayList<>();
+        for (Object[] entry : entries) list.add(entry);
+        return list;
     }
 }

@@ -6,6 +6,7 @@ import {
 import { getAnalyticsSummary, getTransactions } from '../api/client';
 import TransactionsTable from '../components/TransactionsTable';
 import SerenaInsightCard from '../components/SerenaInsightCard';
+import CoachCard from '../components/CoachCard';
 
 const COLORS = [
   '#6366f1', '#ec4899', '#f59e0b', '#10b981',
@@ -64,7 +65,7 @@ export default function DashboardPage() {
         <Link to="/upload" style={styles.uploadBtn}>+ Ekstre Yükle</Link>
       </div>
 
-      {/* İki kolonlu üst alan: Toplam kart + Serena */}
+      {/* Üst grid: Toplam kart + Serena */}
       <div style={styles.topGrid}>
         <div style={styles.card}>
           <p style={styles.cardLabel}>Toplam Harcama</p>
@@ -81,6 +82,11 @@ export default function DashboardPage() {
         </div>
 
         <SerenaInsightCard summary={summary} />
+      </div>
+
+      {/* Coach kartı — tam genişlik */}
+      <div style={styles.coachRow}>
+        <CoachCard summary={summary} />
       </div>
 
       {/* Pasta grafik */}
@@ -199,6 +205,9 @@ const styles = {
     margin: 0,
     fontSize: '13px',
     color: '#9ca3af',
+  },
+  coachRow: {
+    margin: '20px 32px 0',
   },
   section: {
     margin: '24px 32px 0',
