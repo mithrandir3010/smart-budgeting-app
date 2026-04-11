@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
+  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { getAnalyticsSummary } from '../api/client';
+import { getAnalyticsSummary, getTransactions } from '../api/client';
+import TransactionsTable from '../components/TransactionsTable';
+import SerenaInsightCard from '../components/SerenaInsightCard';
 
 const COLORS = [
   '#6366f1', '#ec4899', '#f59e0b', '#10b981',
@@ -19,22 +16,25 @@ const USER_ID = 1;
 
 export default function DashboardPage() {
   const [summary, setSummary] = useState(null);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    getAnalyticsSummary(USER_ID)
-      .then((res) => setSummary(res.data))
+    Promise.all([
+      getAnalyticsSummary(USER_ID),
+      getTransactions(USER_ID),
+    ])
+      .then(([summaryRes, txRes]) => {
+        setSummary(summaryRes.data);
+        setTransactions(txRes.data);
+      })
       .catch(() => setError('Veriler yüklenirken bir hata oluştu.'))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
-    return (
-      <div style={styles.centered}>
-        <p>Yükleniyor...</p>
-      </div>
-    );
+    return <div style={styles.centered}><p>Yükleniyor...</p></div>;
   }
 
   if (error) {
@@ -54,54 +54,58 @@ export default function DashboardPage() {
       {/* Kırmızı uyarı barı */}
       {summary.warning && (
         <div style={styles.warningBar}>
-          <span>⚠ {summary.warning}</span>
+          ⚠ {summary.warning}
         </div>
       )}
 
+      {/* Üst başlık */}
       <div style={styles.header}>
         <h1 style={styles.title}>Harcama Özeti</h1>
-        <Link to="/upload" style={styles.uploadBtn}>
-          + Ekstre Yükle
-        </Link>
+        <Link to="/upload" style={styles.uploadBtn}>+ Ekstre Yükle</Link>
       </div>
 
-      {/* Toplam harcama kartı */}
-      <div style={styles.card}>
-        <p style={styles.cardLabel}>Toplam Harcama</p>
-        <p style={styles.cardAmount}>
-          {Number(summary.totalSpending).toLocaleString('tr-TR', {
-            style: 'currency',
-            currency: 'TRY',
-          })}
-        </p>
+      {/* İki kolonlu üst alan: Toplam kart + Serena */}
+      <div style={styles.topGrid}>
+        <div style={styles.card}>
+          <p style={styles.cardLabel}>Toplam Harcama</p>
+          <p style={styles.cardAmount}>
+            {Number(summary.totalSpending).toLocaleString('tr-TR', {
+              style: 'currency',
+              currency: 'TRY',
+            })}
+          </p>
+          <p style={styles.cardSub}>
+            {transactions.length} işlem &bull;{' '}
+            {Object.keys(summary.categoryBreakdown || {}).length} kategori
+          </p>
+        </div>
+
+        <SerenaInsightCard summary={summary} />
       </div>
 
       {/* Pasta grafik */}
-      {pieData.length > 0 ? (
-        <div style={styles.chartCard}>
-          <h2 style={styles.chartTitle}>Kategori Dağılımı</h2>
-          <ResponsiveContainer width="100%" height={340}>
+      {pieData.length > 0 && (
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Kategori Dağılımı</h2>
+          <ResponsiveContainer width="100%" height={320}>
             <PieChart>
               <Pie
                 data={pieData}
                 cx="50%"
                 cy="50%"
-                outerRadius={120}
+                outerRadius={110}
                 dataKey="value"
                 label={({ name, percent }) =>
                   `${name} %${(percent * 100).toFixed(0)}`
                 }
               >
-                {pieData.map((_, index) => (
-                  <Cell
-                    key={index}
-                    fill={COLORS[index % COLORS.length]}
-                  />
+                {pieData.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
               <Tooltip
-                formatter={(value) =>
-                  value.toLocaleString('tr-TR', {
+                formatter={(v) =>
+                  Number(v).toLocaleString('tr-TR', {
                     style: 'currency',
                     currency: 'TRY',
                   })
@@ -111,11 +115,13 @@ export default function DashboardPage() {
             </PieChart>
           </ResponsiveContainer>
         </div>
-      ) : (
-        <div style={styles.chartCard}>
-          <p style={{ color: '#9ca3af' }}>Henüz kategori verisi yok.</p>
-        </div>
       )}
+
+      {/* İşlemler tablosu */}
+      <div style={styles.section}>
+        <h2 style={styles.sectionTitle}>İşlemler</h2>
+        <TransactionsTable transactions={transactions} />
+      </div>
     </div>
   );
 }
@@ -125,6 +131,7 @@ const styles = {
     minHeight: '100vh',
     background: '#f9fafb',
     fontFamily: 'system-ui, sans-serif',
+    paddingBottom: '48px',
   },
   centered: {
     display: 'flex',
@@ -148,7 +155,7 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: '28px',
+    fontSize: '26px',
     fontWeight: '700',
     color: '#111827',
   },
@@ -161,37 +168,48 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
   },
+  topGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '20px',
+    margin: '20px 32px 0',
+  },
   card: {
-    margin: '24px 32px 0',
     background: '#fff',
     borderRadius: '12px',
     padding: '28px 32px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
   },
   cardLabel: {
-    margin: '0 0 8px',
-    fontSize: '14px',
+    margin: '0 0 6px',
+    fontSize: '12px',
     color: '#6b7280',
-    fontWeight: '500',
+    fontWeight: '600',
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
   },
   cardAmount: {
-    margin: 0,
-    fontSize: '40px',
+    margin: '0 0 8px',
+    fontSize: '38px',
     fontWeight: '700',
     color: '#111827',
+    letterSpacing: '-1px',
   },
-  chartCard: {
-    margin: '24px 32px',
+  cardSub: {
+    margin: 0,
+    fontSize: '13px',
+    color: '#9ca3af',
+  },
+  section: {
+    margin: '24px 32px 0',
     background: '#fff',
     borderRadius: '12px',
-    padding: '28px 32px',
+    padding: '24px 28px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
   },
-  chartTitle: {
+  sectionTitle: {
     margin: '0 0 16px',
-    fontSize: '18px',
+    fontSize: '16px',
     fontWeight: '600',
     color: '#374151',
   },

@@ -10,6 +10,9 @@ const client = axios.create({
 export const getAnalyticsSummary = (userId) =>
   client.get('/api/v1/analytics/summary', { params: { userId } });
 
+export const getTransactions = (userId) =>
+  client.get('/api/v1/analytics/transactions', { params: { userId } });
+
 export const uploadStatement = (file, userId) => {
   const formData = new FormData();
   formData.append('file', file);
