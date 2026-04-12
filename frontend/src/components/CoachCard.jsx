@@ -1,29 +1,39 @@
-import { TrendingUp, Target, Zap } from 'lucide-react';
+/**
+ * CoachCard
+ *
+ * Harcama verilerini görselleştirir — sayılar, progress bar, tahmin.
+ * Koçluk metnini göstermez; o sorumluluk SerenaInsightCard'a aittir.
+ *
+ * Veri kaynağı: /api/v1/analytics/summary (AnalyticsService)
+ * Aynı veri MCP tool serena_get_budget_summary üzerinden de erişilebilirdir.
+ */
+
+import { TrendingUp, Zap, BarChart2 } from 'lucide-react';
 
 function ProgressBar({ current, projected, budget }) {
   const budgetNum    = Number(budget)    || 10000;
   const currentNum   = Number(current)   || 0;
   const projectedNum = Number(projected) || 0;
 
-  // Bar maksimumu: bütçenin 1.5 katı (aşım görünür olsun)
-  const max       = budgetNum * 1.5;
-  const curPct    = Math.min((currentNum   / max) * 100, 100);
-  const projPct   = Math.min((projectedNum / max) * 100, 100);
-  const limitPct  = Math.min((budgetNum    / max) * 100, 100);
+  // Bar maksimumu: bütçenin 1.5 katı — aşım görünür kalsın
+  const max      = budgetNum * 1.5;
+  const curPct   = Math.min((currentNum   / max) * 100, 100);
+  const projPct  = Math.min((projectedNum / max) * 100, 100);
+  const limitPct = Math.min((budgetNum    / max) * 100, 100);
 
   const isOverBudget = projectedNum > budgetNum;
 
   return (
     <div style={styles.barWrap}>
-      {/* Ana ray */}
       <div style={styles.barTrack}>
-        {/* Şu anki harcama — solid */}
+        {/* Gerçekleşen harcama */}
         <div style={{
           ...styles.barFill,
           width: `${curPct}%`,
           background: isOverBudget ? '#ef4444' : '#6366f1',
         }} />
-        {/* Tahmini ek harcama — çizgili/şeffaf */}
+
+        {/* Tahmini ek harcama — çizgili */}
         {projPct > curPct && (
           <div style={{
             ...styles.barProjected,
@@ -34,11 +44,11 @@ function ProgressBar({ current, projected, budget }) {
               : 'repeating-linear-gradient(45deg,#a5b4fc,#a5b4fc 4px,#e0e7ff 4px,#e0e7ff 8px)',
           }} />
         )}
-        {/* Limit çizgisi */}
+
+        {/* Limit işareti */}
         <div style={{ ...styles.limitLine, left: `${limitPct}%` }} />
       </div>
 
-      {/* Etiketler */}
       <div style={styles.barLabels}>
         <span style={{ color: isOverBudget ? '#ef4444' : '#6366f1', fontWeight: 600 }}>
           Şu an: {fmt(currentNum)}
@@ -55,40 +65,40 @@ function ProgressBar({ current, projected, budget }) {
 }
 
 export default function CoachCard({ summary }) {
-  if (!summary) return null;
+  if (!summary || Number(summary.totalSpending) === 0) return null;
 
-  const { coachAdvice, projectedSpending, dailyRate, monthlyBudget, totalSpending } = summary;
-  if (!coachAdvice) return null;
+  const { projectedSpending, dailyRate, monthlyBudget, totalSpending } = summary;
 
-  const projected   = Number(projectedSpending) || 0;
-  const budget      = Number(monthlyBudget)      || 10000;
+  const projected    = Number(projectedSpending) || 0;
+  const budget       = Number(monthlyBudget)      || 10000;
   const isOverBudget = projected > budget;
-
   const accentColor  = isOverBudget ? '#ef4444' : '#10b981';
   const bgColor      = isOverBudget ? '#fff5f5' : '#f0fdf4';
-  const borderColor  = isOverBudget ? '#ef4444' : '#10b981';
+
+  // Kalan limit ya da aşım miktarı
+  const diff    = Math.abs(projected - budget);
+  const diffPct = budget ? ((diff / budget) * 100).toFixed(0) : 0;
 
   return (
     <div style={{
       ...styles.card,
       background: bgColor,
-      borderLeft: `4px solid ${borderColor}`,
+      borderLeft: `4px solid ${accentColor}`,
     }}>
-      {/* Kart başlığı */}
+
+      {/* Başlık satırı */}
       <div style={styles.header}>
-        <div style={{
-          ...styles.iconWrap,
-          background: `${accentColor}18`,
-        }}>
-          <Target size={22} color={accentColor} strokeWidth={2} />
-        </div>
-        <div>
-          <p style={styles.title}>Coach'un Tavsiyesi</p>
-          <p style={styles.subtitle}>Serena'nın Ay Sonu Tahmini</p>
+        <div style={{ ...styles.iconWrap, background: `${accentColor}18` }}>
+          <BarChart2 size={22} color={accentColor} strokeWidth={2} />
         </div>
 
-        {/* Sağ üstte günlük hız rozeti */}
-        {dailyRate > 0 && (
+        <div style={{ flex: 1 }}>
+          <p style={styles.title}>Harcama Hızı & Projeksiyon</p>
+          <p style={styles.subtitle}>Ay sonu tahmini — gerçek zamanlı</p>
+        </div>
+
+        {/* Günlük harcama hızı rozeti */}
+        {Number(dailyRate) > 0 && (
           <div style={{ ...styles.badge, background: `${accentColor}15`, color: accentColor }}>
             <Zap size={12} strokeWidth={2.5} />
             <span>{fmt(Number(dailyRate))} / gün</span>
@@ -103,42 +113,42 @@ export default function CoachCard({ summary }) {
         budget={monthlyBudget}
       />
 
-      {/* Tahmini ay sonu değeri — büyük ve belirgin */}
+      {/* Ay sonu tahmini — büyük değer */}
       <div style={styles.projectedWrap}>
         <TrendingUp size={18} color={accentColor} strokeWidth={2} />
         <span style={{ ...styles.projectedLabel, color: '#6b7280' }}>Ay sonu tahmini:</span>
         <span style={{ ...styles.projectedValue, color: accentColor }}>
           {fmt(projected)}
         </span>
-        {isOverBudget && (
+
+        {isOverBudget ? (
           <span style={styles.overagePill}>
-            +{pct(projected, budget)} limit üstü
+            +%{diffPct} limit üstü
+          </span>
+        ) : (
+          <span style={styles.surplusPill}>
+            -%{diffPct} altında ✓
           </span>
         )}
       </div>
 
-      {/* Koçluk tavsiyesi metni */}
-      <p style={{
-        ...styles.adviceText,
-        color: isOverBudget ? '#7f1d1d' : '#14532d',
-      }}>
-        {coachAdvice}
+      {/* Kalan / aşım özeti */}
+      <p style={{ ...styles.summaryLine, color: isOverBudget ? '#b91c1c' : '#15803d' }}>
+        {isOverBudget
+          ? `Tahmini aşım: ${fmt(diff)} — günlük hızı düşürmek durumu değiştirir.`
+          : `Tahmini tasarruf: ${fmt(diff)} — limitin altında kalıyorsun.`
+        }
       </p>
     </div>
   );
 }
 
-// -------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 // Yardımcılar
-// -------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
 
 function fmt(n) {
   return Number(n).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-}
-
-function pct(projected, budget) {
-  if (!budget) return '—';
-  return `%${(((projected - budget) / budget) * 100).toFixed(0)}`;
 }
 
 const styles = {
@@ -174,7 +184,6 @@ const styles = {
     color: '#6b7280',
   },
   badge: {
-    marginLeft: 'auto',
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
@@ -227,7 +236,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    marginBottom: '12px',
+    marginBottom: '10px',
     flexWrap: 'wrap',
   },
   projectedLabel: {
@@ -246,10 +255,18 @@ const styles = {
     fontSize: '11px',
     fontWeight: '600',
   },
-  adviceText: {
+  surplusPill: {
+    background: '#dcfce7',
+    color: '#15803d',
+    padding: '2px 8px',
+    borderRadius: '999px',
+    fontSize: '11px',
+    fontWeight: '600',
+  },
+  summaryLine: {
     margin: 0,
-    fontSize: '13.5px',
-    lineHeight: '1.65',
-    fontStyle: 'italic',
+    fontSize: '12.5px',
+    lineHeight: '1.5',
+    fontWeight: '500',
   },
 };

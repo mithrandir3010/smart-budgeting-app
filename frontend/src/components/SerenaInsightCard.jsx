@@ -1,3 +1,17 @@
+/**
+ * SerenaInsightCard
+ *
+ * Serena'nın koçluk mesajını görüntüler. Metin kaynağı olarak doğrudan
+ * backend'deki AnalyticsService.buildCoachAdvice() çıktısını (summary.coachAdvice)
+ * kullanır. Bu, MCP tool'u "serena_get_budget_summary" ile birebir aynı veridir —
+ * ek bir hesaplama ya da harici API çağrısı yapılmaz.
+ *
+ * Görsel tasarım:
+ *  - Uyarı modu  → kırmızı arka plan, sol kenar çizgisi, kırmızı metin
+ *  - Normal mod  → yeşil arka plan, sol kenar çizgisi, yeşil metin
+ *  - En yüksek kategori ikonu (categoryBreakdown'dan türetilir)
+ */
+
 import {
   Home,
   ShoppingCart,
@@ -5,78 +19,44 @@ import {
   Zap,
   Car,
   ShoppingBag,
+  Utensils,
+  Wifi,
+  Smartphone,
 } from 'lucide-react';
 
 const CATEGORY_ICONS = {
-  'Kira':    { Icon: Home,         color: '#6366f1' },
-  'Market':  { Icon: ShoppingCart, color: '#f59e0b' },
-  'Kafe':    { Icon: Coffee,       color: '#92400e' },
-  'Fatura':  { Icon: Zap,          color: '#0ea5e9' },
-  'Ulaşım':  { Icon: Car,          color: '#10b981' },
-  'Diğer':   { Icon: ShoppingBag,  color: '#8b5cf6' },
+  'Kira':      { Icon: Home,         color: '#6366f1' },
+  'Market':    { Icon: ShoppingCart, color: '#f59e0b' },
+  'Kafe':      { Icon: Coffee,       color: '#92400e' },
+  'Fatura':    { Icon: Zap,          color: '#0ea5e9' },
+  'Ulaşım':    { Icon: Car,          color: '#10b981' },
+  'Yemek':     { Icon: Utensils,     color: '#f97316' },
+  'İnternet':  { Icon: Wifi,         color: '#6366f1' },
+  'Telefon':   { Icon: Smartphone,   color: '#8b5cf6' },
+  'Diğer':     { Icon: ShoppingBag,  color: '#8b5cf6' },
 };
 
 const DEFAULT_ICON = { Icon: ShoppingBag, color: '#8b5cf6' };
 
-function getTopCategory(categoryBreakdown) {
+function topCategory(categoryBreakdown) {
   const entries = Object.entries(categoryBreakdown || {});
   if (!entries.length) return null;
-  return entries.sort(([, a], [, b]) => b - a)[0];
-}
-
-function buildInsight(summary) {
-  if (!summary) return null;
-
-  const { totalSpending, categoryBreakdown, warning } = summary;
-  const topCategory = getTopCategory(categoryBreakdown);
-
-  if (warning) {
-    const overshoot = (Number(totalSpending) - 10000).toLocaleString('tr-TR', {
-      style: 'currency',
-      currency: 'TRY',
-    });
-    const topName = topCategory?.[0] || 'bilinmeyen kategori';
-    const topAmount = Number(topCategory?.[1] || 0).toLocaleString('tr-TR', {
-      style: 'currency',
-      currency: 'TRY',
-    });
-    return {
-      mood: 'warning',
-      topCategoryName: topName,
-      text: `Bu ay limitini ${overshoot} aştın. En büyük kalem "${topName}" (${topAmount}) — bunu biraz kısmak büyük fark yaratabilir. Ama panikleme, farkında olmak zaten çözümün yarısı.`,
-    };
-  }
-
-  if (topCategory) {
-    const topName = topCategory[0];
-    const topAmount = Number(topCategory[1]).toLocaleString('tr-TR', {
-      style: 'currency',
-      currency: 'TRY',
-    });
-    return {
-      mood: 'ok',
-      topCategoryName: topName,
-      text: `Limitin içindesin, aferin! En yüksek harcaman "${topName}" kategorisinde: ${topAmount}. Bu ay dengeli görünüyor, böyle devam et.`,
-    };
-  }
-
-  return {
-    mood: 'ok',
-    topCategoryName: null,
-    text: 'Henüz yeterli veri yok. Ekstre yükledikçe sana daha akıllıca öneriler sunabilirim.',
-  };
+  return entries.sort(([, a], [, b]) => Number(b) - Number(a))[0];
 }
 
 export default function SerenaInsightCard({ summary }) {
-  const insight = buildInsight(summary);
-  if (!insight) return null;
+  if (!summary) return null;
 
-  const isWarning = insight.mood === 'warning';
+  // ── Kaynak: backend'den gelen hesaplanmış metin ──────────────────────────
+  // coachAdvice = AnalyticsService.buildCoachAdvice() = MCP serena_get_budget_summary
+  const text        = summary.coachAdvice ?? 'Ekstre yükledikçe sana özel öneriler sunacağım.';
+  const isWarning   = !!summary.warning;
   const accentColor = isWarning ? '#ef4444' : '#10b981';
 
-  const { Icon: TopIcon, color: iconColor } =
-    CATEGORY_ICONS[insight.topCategoryName] ?? DEFAULT_ICON;
-  const showCategoryIcon = !!insight.topCategoryName;
+  // En yüksek harcama kategorisinin ikonu
+  const top             = topCategory(summary.categoryBreakdown);
+  const topName         = top?.[0] ?? null;
+  const { Icon, color } = CATEGORY_ICONS[topName] ?? DEFAULT_ICON;
 
   return (
     <div style={{
@@ -84,40 +64,38 @@ export default function SerenaInsightCard({ summary }) {
       borderLeft: `4px solid ${accentColor}`,
       background: isWarning ? '#fff5f5' : '#f0fdf4',
     }}>
-      <div style={styles.header}>
 
-        {/* Top-category icon — büyük ve belirgin */}
-        {showCategoryIcon && (
+      {/* Kart başlığı: kategori ikonu + Serena kimliği */}
+      <div style={styles.header}>
+        {topName && (
           <div style={{
             ...styles.categoryIconWrap,
-            background: `${iconColor}18`,
+            background: `${color}18`,
           }}>
-            <TopIcon
-              size={36}
-              color={iconColor}
-              strokeWidth={1.8}
-            />
+            <Icon size={36} color={color} strokeWidth={1.8} />
           </div>
         )}
 
-        {/* Serena kimlik bloğu */}
         <div style={styles.identity}>
           <div style={styles.nameRow}>
-            <span style={{
-              ...styles.statusDot,
-              background: accentColor,
-            }} />
+            <span style={{ ...styles.statusDot, background: accentColor }} />
             <p style={styles.name}>Serena</p>
           </div>
-          <p style={styles.role}>AI Finansal Asistanın</p>
+          <p style={styles.role}>AI Finansal Koçun</p>
+        </div>
+
+        {/* MCP kaynak rozeti */}
+        <div style={{ ...styles.sourceBadge, color: accentColor, borderColor: `${accentColor}40` }}>
+          MCP analizi
         </div>
       </div>
 
+      {/* Koçluk metni — tek kaynak: summary.coachAdvice */}
       <p style={{
         ...styles.text,
         color: isWarning ? '#7f1d1d' : '#14532d',
       }}>
-        {insight.text}
+        {text}
       </p>
     </div>
   );
@@ -148,6 +126,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
+    flex: 1,
   },
   nameRow: {
     display: 'flex',
@@ -171,6 +150,16 @@ const styles = {
     fontSize: '12px',
     color: '#6b7280',
     paddingLeft: '14px',
+  },
+  sourceBadge: {
+    fontSize: '10px',
+    fontWeight: '600',
+    border: '1px solid',
+    borderRadius: '999px',
+    padding: '2px 8px',
+    letterSpacing: '0.04em',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
   },
   text: {
     margin: 0,

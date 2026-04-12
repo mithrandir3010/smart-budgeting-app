@@ -22,9 +22,19 @@ import java.util.List;
 /**
  * PDF ekstreden işlem (Transaction) verilerini LLM aracılığıyla ayıklayan ve kaydeden servis.
  *
- * <p>Akış: PDF → PdfService → LLM → JSON → TransactionDto[] → Transaction[] → DB
+ * <h3>Hibrit MCP Mimarisindeki Yeri</h3>
+ * <pre>
+ *  PDF Yükleme  →  ExtractionService (LLM, sadece PDF için)  →  DB
+ *  Dashboard    →  AnalyticsService  (kural tabanlı, LLM YOK) →  Frontend / MCP tools
+ * </pre>
+ * Dashboard'daki Serena mesajları ({@code coachAdvice}) bu servisi çağırmaz.
+ * LLM yalnızca PDF metin → işlem JSON dönüşümünde kullanılır.
  *
- * <p>OPENAI_API_KEY ayarlanmamışsa Mock Mode devreye girer.
+ * <h3>Mock Modu</h3>
+ * <ul>
+ *   <li>{@code serena.extraction.mock=true} → Her zaman sahte veri, LLM çağrısı yok.</li>
+ *   <li>Geçersiz/eksik {@code OPENAI_API_KEY} → Otomatik mock moda geçer.</li>
+ * </ul>
  *
  * <p>Tasarım notu: extractAndMap() hem ayıklamayı hem kaydetmeyi tek @Transactional
  * boundary içinde yapar. Böylece userRepository.findById() ile yüklenen User entity'si
@@ -66,6 +76,14 @@ public class ExtractionService {
             %s
             """;
 
+    /**
+     * {@code true} ise API anahtarı geçerli olsa dahi LLM çağrılmaz; sahte veri döner.
+     * CI/CD ortamları veya demo modları için yararlıdır.
+     * Varsayılan: {@code false} (API key kontrolü isMockMode() tarafından yapılır).
+     */
+    @Value("${serena.extraction.mock:false}")
+    private boolean forceMockMode;
+
     // @Value non-final — Lombok @RequiredArgsConstructor yalnızca final alanları işler
     @Value("${langchain4j.open-ai.chat-model.api-key:" + DEFAULT_API_KEY + "}")
     private String openAiApiKey;
@@ -77,25 +95,38 @@ public class ExtractionService {
     private final ObjectMapper objectMapper;
 
     /**
-     * Anahtar gerçek bir OpenAI key'i değilse Mock Mode aktif olur.
-     * Geçersiz sayılan değerler: null, boş string, varsayılan placeholder,
-     * "sk-" ile başlamayan her değer (gerçek OpenAI keyleri "sk-" ile başlar).
+     * Mock modunun aktif olup olmadığını belirler.
+     *
+     * <p>Öncelik sırası:
+     * <ol>
+     *   <li>{@code serena.extraction.mock=true} → Her koşulda mock (explicit override)</li>
+     *   <li>Eksik / geçersiz API anahtarı → Otomatik mock</li>
+     *   <li>Her ikisi de yoksa → Gerçek LLM çağrısı</li>
+     * </ol>
      */
     private boolean isMockMode() {
+        if (forceMockMode) return true;                        // explicit config override
         if (openAiApiKey == null || openAiApiKey.isBlank()) return true;
         if (DEFAULT_API_KEY.equals(openAiApiKey)) return true;
-        if (!openAiApiKey.startsWith("sk-")) return true;
+        if (!openAiApiKey.startsWith("sk-")) return true;     // gerçek OpenAI key değil
         return false;
     }
 
     /**
      * PDF dosyasını okur; Mock Mode'da sahte JSON, aksi hâlde LLM yanıtı döner.
+     *
+     * <p>NOT: Bu metot yalnızca PDF yükleme akışında çağrılır.
+     * Dashboard Serena kartı bu metodu hiçbir zaman çağırmaz.
      */
     public String extractTransactionsAsJson(MultipartFile file) throws IOException {
-        log.info(">>> Gelen Key: '{}', Mock Mode Aktif mi: {}", openAiApiKey, isMockMode());
+        boolean mock = isMockMode();
+        log.info(">>> Extraction mode: {} | forceMockMode={} | apiKey başlangıcı={}",
+                mock ? "MOCK" : "LLM", forceMockMode,
+                openAiApiKey != null && openAiApiKey.length() > 6
+                    ? openAiApiKey.substring(0, 6) + "…" : "(kısa/null)");
 
-        if (isMockMode()) {
-            log.warn("[1/4] MOCK MODE: Sahte harcamalar üretiliyor — OpenAI key geçerli değil.");
+        if (mock) {
+            log.warn("[1/4] MOCK MODE: Sahte harcamalar kullanılıyor.");
             return MOCK_JSON;
         }
 

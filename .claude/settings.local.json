@@ -57,7 +57,9 @@
       "Bash(python3 -m json.tool)",
       "Bash(python3 -c \" import json,sys data=json.load\\(sys.stdin\\) contexts=data.get\\('contexts',{}\\) for ctx,v in contexts.items\\(\\): for k,mapping in v.get\\('mappings',{}\\).get\\('dispatcherHandlers',{}\\).get\\('webHandler',[]\\): print\\(k, mapping\\) \")",
       "Bash(javap -verbose \"io/modelcontextprotocol/server/transport/WebMvcSseServerTransportProvider.class\")",
-      "Bash(claude mcp:*)"
+      "Bash(claude mcp:*)",
+      "Bash(echo \"Frontend PID: $!\")",
+      "Bash(python3 -c ':*)"
     ]
   }
 }
