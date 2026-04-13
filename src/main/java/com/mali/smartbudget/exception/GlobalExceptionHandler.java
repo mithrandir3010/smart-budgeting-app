@@ -1,5 +1,6 @@
 package com.mali.smartbudget.exception;
 
+import com.mali.smartbudget.exception.DuplicateStatementException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -16,6 +17,20 @@ import java.util.Map;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(DuplicateStatementException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateStatement(DuplicateStatementException e) {
+        log.warn("Mükerrer ekstre tespiti [{}]: {}", e.getDuplicateType(), e.getMessage());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp",      LocalDateTime.now().toString());
+        body.put("status",         HttpStatus.CONFLICT.value());
+        body.put("error",          "Conflict");
+        body.put("message",        e.getMessage());
+        body.put("duplicateType",  e.getDuplicateType() != null ? e.getDuplicateType().name() : null);
+        body.put("periodStart",    e.getPeriodStart() != null ? e.getPeriodStart().toString() : null);
+        body.put("periodEnd",      e.getPeriodEnd()   != null ? e.getPeriodEnd().toString()   : null);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<Map<String, Object>> handleMissingParam(MissingServletRequestParameterException e) {

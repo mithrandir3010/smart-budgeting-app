@@ -4,9 +4,20 @@ import { uploadStatement } from '../api/client';
 
 const USER_ID = 1;
 
+/** Backend hata yanıtından okunabilir mesaj çıkarır.
+ *  GlobalExceptionHandler JSON body: { message: "..." }
+ *  StatementController plain string: "Dosya boş olamaz." */
+function extractMessage(data) {
+  if (!data) return 'Yükleme sırasında bir hata oluştu.';
+  if (typeof data === 'string') return data;
+  if (typeof data === 'object' && data.message) return data.message;
+  return JSON.stringify(data);
+}
+
 export default function UploadPage() {
   const [file, setFile] = useState(null);
-  const [status, setStatus] = useState(null); // { type: 'success' | 'error', message: string }
+  // type: 'success' | 'error' | 'duplicate'
+  const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e) => {
@@ -36,13 +47,27 @@ export default function UploadPage() {
       setFile(null);
       e.target.reset();
     } catch (err) {
-      const msg =
-        err.response?.data || 'Yükleme sırasında bir hata oluştu.';
-      setStatus({ type: 'error', message: msg });
+      const isDuplicate = err.response?.status === 409;
+      const msg = extractMessage(err.response?.data);
+      setStatus({ type: isDuplicate ? 'duplicate' : 'error', message: msg });
     } finally {
       setLoading(false);
     }
   };
+
+  const alertStyle = (() => {
+    if (!status) return null;
+    if (status.type === 'success')   return styles.alertSuccess;
+    if (status.type === 'duplicate') return styles.alertDuplicate;
+    return styles.alertError;
+  })();
+
+  const alertIcon = (() => {
+    if (!status) return '';
+    if (status.type === 'success')   return '✓ ';
+    if (status.type === 'duplicate') return '⚠ ';
+    return '✕ ';
+  })();
 
   return (
     <div style={styles.page}>
@@ -84,13 +109,8 @@ export default function UploadPage() {
           </label>
 
           {status && (
-            <div
-              style={
-                status.type === 'success'
-                  ? styles.alertSuccess
-                  : styles.alertError
-              }
-            >
+            <div style={alertStyle}>
+              <span style={{ fontWeight: '700' }}>{alertIcon}</span>
               {status.message}
             </div>
           )}
@@ -104,9 +124,19 @@ export default function UploadPage() {
               cursor: loading || !file ? 'not-allowed' : 'pointer',
             }}
           >
-            {loading ? 'Yükleniyor...' : 'Ekstreyi Yükle'}
+            {loading ? 'İşleniyor...' : 'Ekstreyi Yükle'}
           </button>
         </form>
+
+        {/* Bilgi notu */}
+        <div style={styles.infoBox}>
+          <p style={styles.infoTitle}>Nasıl çalışır?</p>
+          <ul style={styles.infoList}>
+            <li>Aynı dosyayı tekrar yüklerseniz sistem bunu otomatik tespit eder.</li>
+            <li>Aynı dönemi kapsayan farklı bir dosya yüklemeye çalışırsanız uyarı alırsınız.</li>
+            <li>Abonelikler (Netflix, Spotify vb.) otomatik olarak işaretlenir.</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
@@ -198,6 +228,7 @@ const styles = {
     borderRadius: '8px',
     padding: '12px 16px',
     fontSize: '14px',
+    lineHeight: '1.5',
   },
   alertError: {
     background: '#fee2e2',
@@ -206,6 +237,16 @@ const styles = {
     borderRadius: '8px',
     padding: '12px 16px',
     fontSize: '14px',
+    lineHeight: '1.5',
+  },
+  alertDuplicate: {
+    background: '#fffbeb',
+    color: '#92400e',
+    border: '1px solid #fcd34d',
+    borderRadius: '8px',
+    padding: '12px 16px',
+    fontSize: '14px',
+    lineHeight: '1.5',
   },
   submitBtn: {
     background: '#6366f1',
@@ -216,5 +257,26 @@ const styles = {
     fontSize: '16px',
     fontWeight: '600',
     transition: 'opacity 0.2s',
+  },
+  infoBox: {
+    marginTop: '28px',
+    background: '#f3f4f6',
+    borderRadius: '10px',
+    padding: '16px 20px',
+  },
+  infoTitle: {
+    margin: '0 0 8px',
+    fontSize: '13px',
+    fontWeight: '700',
+    color: '#374151',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+  },
+  infoList: {
+    margin: 0,
+    paddingLeft: '18px',
+    fontSize: '13px',
+    color: '#6b7280',
+    lineHeight: '1.8',
   },
 };
