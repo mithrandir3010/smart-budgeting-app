@@ -7,6 +7,7 @@ import { getAnalyticsSummary, getTransactions } from '../api/client';
 import TransactionsTable from '../components/TransactionsTable';
 import SerenaInsightCard from '../components/SerenaInsightCard';
 import CoachCard from '../components/CoachCard';
+import SubscriptionCard from '../components/SubscriptionCard';
 
 const COLORS = [
   '#6366f1', '#ec4899', '#f59e0b', '#10b981',
@@ -87,6 +88,11 @@ export default function DashboardPage() {
       {/* Coach kartı — tam genişlik */}
       <div style={styles.coachRow}>
         <CoachCard summary={summary} />
+      </div>
+
+      {/* Abonelik kartı — tam genişlik */}
+      <div style={styles.coachRow}>
+        <SubscriptionCard />
       </div>
 
       {/* Pasta grafik */}

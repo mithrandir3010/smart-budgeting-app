@@ -49,9 +49,12 @@ public class ExtractionService {
 
     private static final String MOCK_JSON = """
             [
-              {"date": "2026-04-01", "description": "Migros Market", "amount": 245.90, "category": "Market", "currency": "TRY"},
-              {"date": "2026-04-03", "description": "Starbucks Kahve", "amount": 89.50, "category": "Kafe", "currency": "TRY"},
-              {"date": "2026-04-05", "description": "Kira Ödemesi", "amount": 12000.00, "category": "Kira", "currency": "TRY"}
+              {"date": "2026-04-01", "description": "Migros Market", "amount": 245.90, "category": "Market", "currency": "TRY", "isSubscription": false},
+              {"date": "2026-04-03", "description": "Starbucks Kahve", "amount": 89.50, "category": "Kafe", "currency": "TRY", "isSubscription": false},
+              {"date": "2026-04-05", "description": "Kira Ödemesi", "amount": 12000.00, "category": "Kira", "currency": "TRY", "isSubscription": false},
+              {"date": "2026-04-07", "description": "Netflix", "amount": 79.99, "category": "Eğlence", "currency": "TRY", "isSubscription": true},
+              {"date": "2026-04-08", "description": "Spotify Premium", "amount": 49.99, "category": "Eğlence", "currency": "TRY", "isSubscription": true},
+              {"date": "2026-04-10", "description": "iCloud Depolama 50GB", "amount": 14.99, "category": "Teknoloji", "currency": "TRY", "isSubscription": true}
             ]
             """;
 
@@ -66,9 +69,18 @@ public class ExtractionService {
                 "description": "işlem açıklaması",
                 "amount": 123.45,
                 "category": "kategori (ör: Market, Fatura, Ulaşım)",
-                "currency": "TRY"
+                "currency": "TRY",
+                "isSubscription": false
               }
             ]
+
+            isSubscription kuralı:
+            - Netflix, Spotify, YouTube Premium, Apple TV+, Disney+, Hulu gibi video/müzik akış servisleri → true
+            - iCloud, Google One, Dropbox, OneDrive gibi bulut depolama abonelikleri → true
+            - Amazon Prime, Trendyol Premium gibi e-ticaret üyelikleri → true
+            - Gym, spor salonu, dergi, gazete dijital abonelikleri → true
+            - Antivirüs, yazılım lisansları (Adobe, Microsoft 365 vb.) → true
+            - Tek seferlik alışveriş, market, kafe, restoran, ulaşım, kira vb. → false
 
             Sadece JSON döndür, başka bir açıklama ekleme.
 
@@ -198,6 +210,7 @@ public class ExtractionService {
                         .amount(dto.amount())
                         .category(dto.category())
                         .currency(dto.currency())
+                        .isSubscription(dto.isSubscription())
                         .build())
                 .toList();
 

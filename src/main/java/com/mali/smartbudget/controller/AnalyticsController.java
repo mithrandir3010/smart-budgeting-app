@@ -35,7 +35,17 @@ public class AnalyticsController {
         log.info("İşlem listesi isteği alındı. userId={}", userId);
         List<TransactionDto> dtos = transactionService.getTransactionsByUser(userId)
                 .stream()
-                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency()))
+                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency(), t.isSubscription()))
+                .toList();
+        return ResponseEntity.ok(dtos);
+    }
+
+    @GetMapping("/subscriptions")
+    public ResponseEntity<List<TransactionDto>> getSubscriptions(@RequestParam Long userId) {
+        log.info("Abonelik listesi isteği alındı. userId={}", userId);
+        List<TransactionDto> dtos = transactionService.getSubscriptionsByUser(userId)
+                .stream()
+                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency(), t.isSubscription()))
                 .toList();
         return ResponseEntity.ok(dtos);
     }

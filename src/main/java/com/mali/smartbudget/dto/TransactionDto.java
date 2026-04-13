@@ -17,5 +17,6 @@ public record TransactionDto(
         String description,
         BigDecimal amount,
         String category,
-        String currency
+        String currency,
+        boolean isSubscription
 ) {}

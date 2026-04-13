@@ -59,7 +59,15 @@
       "Bash(javap -verbose \"io/modelcontextprotocol/server/transport/WebMvcSseServerTransportProvider.class\")",
       "Bash(claude mcp:*)",
       "Bash(echo \"Frontend PID: $!\")",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "Bash(PGPASSWORD=postgres psql:*)",
+      "Bash(pkill -f 'smart-budgeting\\\\|spring-boot')",
+      "Bash(mvn spring-boot:run -q)",
+      "Bash(echo \"Backend başlatıldı \\(PID $!\\)\")",
+      "Bash(pkill -f \"vite\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'totalSpending: {d[\\\\\"totalSpending\\\\\"]}, kategori: {list\\(d[\\\\\"categoryBreakdown\\\\\"].keys\\(\\)\\)}'\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'{len\\(d\\)} işlem, isSubscription alanları: {[t[\\\\\"isSubscription\\\\\"] for t in d]}'\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); total=sum\\(float\\(t['amount']\\) for t in d\\); print\\(f'{len\\(d\\)} abonelik, aylık toplam: {total:.2f} TL, isimler: {[t[\\\\\"description\\\\\"] for t in d]}'\\)\")"
     ]
   }
 }

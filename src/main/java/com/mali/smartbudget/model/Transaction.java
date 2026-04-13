@@ -41,4 +41,7 @@ public class Transaction {
 
     @Column(length = 3)
     private String currency;
+
+    @Column(nullable = false, columnDefinition = "boolean DEFAULT false")
+    private boolean isSubscription;
 }

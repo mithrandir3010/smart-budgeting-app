@@ -59,7 +59,8 @@ public class SerenaTools {
                 budgetSummaryTool(),
                 categoryBreakdownTool(),
                 transactionsTool(),
-                savingsTipsTool()
+                savingsTipsTool(),
+                subscriptionsTool()
         );
     }
 
@@ -424,6 +425,75 @@ public class SerenaTools {
             sb.append("Hedefe ulaşmak için daha agresif kısıntı ya da ek gelir gerekiyor.\n");
         }
 
+        return sb.toString();
+    }
+
+    // =========================================================================
+    // TOOL 5 — serena_get_subscriptions
+    // =========================================================================
+
+    /**
+     * Kullanıcının tüm aboneliklerini (isSubscription=true) listeler ve aylık toplam tutar hesaplar.
+     * Netflix, Spotify, iCloud gibi tekrarlayan ödemeleri tespit eder.
+     */
+    private McpServerFeatures.SyncToolSpecification subscriptionsTool() {
+        Tool tool = buildTool(
+                "serena_get_subscriptions",
+                "Kullanıcının aktif aboneliklerini listeler (Netflix, Spotify, iCloud vb.)." +
+                " Her bir aboneliğin tutarını ve aylık toplam abonelik masrafını döner." +
+                " Otomatik ödemeleri analiz etmek veya kullanıcıya farkında olmadığı" +
+                " abonelikleri göstermek için bu tool'u kullan.",
+                """
+                {
+                  "type": "object",
+                  "properties": {
+                    "userId": {
+                      "type": "number",
+                      "description": "Sorgulanacak kullanıcı ID'si"
+                    }
+                  },
+                  "required": ["userId"]
+                }
+                """
+        );
+
+        return new McpServerFeatures.SyncToolSpecification(tool,
+                (McpSyncServerExchange exchange, Map<String, Object> args) -> {
+                    Long userId = toLong(args.get("userId"));
+                    log.debug("[MCP] serena_get_subscriptions → userId={}", userId);
+
+                    try {
+                        List<Transaction> subs = transactionService.getSubscriptionsByUser(userId);
+                        String result = formatSubscriptions(subs);
+                        return ok(result);
+                    } catch (Exception e) {
+                        log.error("[MCP] Subscriptions hatası userId={}", userId, e);
+                        return error("Abonelik listesi alınamadı: " + e.getMessage());
+                    }
+                });
+    }
+
+    private String formatSubscriptions(List<Transaction> subs) {
+        if (subs.isEmpty()) {
+            return "Henüz tespit edilmiş bir abonelik yok.";
+        }
+
+        BigDecimal total = subs.stream()
+                .map(Transaction::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        StringBuilder sb = new StringBuilder("## Abonelik Listesi\n\n");
+        sb.append("| Abonelik | Kategori | Tutar |\n");
+        sb.append("|----------|----------|-------|\n");
+
+        subs.forEach(t -> sb.append("| %-30s | %-15s | %12s |\n".formatted(
+                truncate(t.getDescription(), 30),
+                t.getCategory() != null ? t.getCategory() : "—",
+                formatTRY(t.getAmount())
+        )));
+
+        sb.append("\n**Aylık Toplam Abonelik Masrafı**: ").append(formatTRY(total));
+        sb.append("\n**Abonelik Sayısı**: ").append(subs.size());
         return sb.toString();
     }
 

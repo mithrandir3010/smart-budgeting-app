@@ -28,4 +28,9 @@ public class TransactionService {
     public List<Transaction> getTransactionsByUser(Long userId) {
         return transactionRepository.findByUserId(userId);
     }
+
+    @Transactional(readOnly = true)
+    public List<Transaction> getSubscriptionsByUser(Long userId) {
+        return transactionRepository.findByUserIdAndIsSubscriptionTrue(userId);
+    }
 }
