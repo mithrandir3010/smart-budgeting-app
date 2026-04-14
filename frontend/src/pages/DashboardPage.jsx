@@ -8,14 +8,33 @@ import TransactionsTable from '../components/TransactionsTable';
 import SerenaInsightCard from '../components/SerenaInsightCard';
 import CoachCard from '../components/CoachCard';
 import SubscriptionCard from '../components/SubscriptionCard';
+import { useTheme } from '../context/ThemeContext';
+import { Sun, Moon, Upload, LogOut } from 'lucide-react';
 
 const COLORS = [
-  '#6366f1', '#ec4899', '#f59e0b', '#10b981',
-  '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6',
+  '#6366f1', '#f43f5e', '#10b981', '#f59e0b',
+  '#3b82f6', '#8b5cf6', '#14b8a6', '#84cc16',
 ];
+
+function CustomTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl px-3.5 py-2.5 shadow-lg text-sm">
+      <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 mb-0.5">
+        {payload[0].name}
+      </p>
+      <p className="font-bold text-zinc-900 dark:text-zinc-100">
+        {Number(payload[0].value).toLocaleString('tr-TR', {
+          style: 'currency', currency: 'TRY',
+        })}
+      </p>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
   const currentUser = getStoredUser();
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -28,10 +47,7 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    Promise.all([
-      getAnalyticsSummary(),
-      getTransactions(),
-    ])
+    Promise.all([getAnalyticsSummary(), getTransactions()])
       .then(([summaryRes, txRes]) => {
         setSummary(summaryRes.data);
         setTransactions(txRes.data);
@@ -41,13 +57,18 @@ export default function DashboardPage() {
   }, []);
 
   if (loading) {
-    return <div style={styles.centered}><p>Yükleniyor...</p></div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 gap-3">
+        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-zinc-400 dark:text-zinc-500">Yükleniyor...</p>
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div style={styles.centered}>
-        <p style={{ color: '#ef4444' }}>{error}</p>
+      <div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950">
+        <p className="text-rose-500">{error}</p>
       </div>
     );
   }
@@ -57,208 +78,167 @@ export default function DashboardPage() {
   );
 
   return (
-    <div style={styles.page}>
-      {/* Kırmızı uyarı barı */}
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 pb-16 transition-colors duration-200">
+
+      {/* Warning banner */}
       {summary.warning && (
-        <div style={styles.warningBar}>
+        <div className="bg-rose-500 text-white px-6 py-3 text-sm font-medium text-center">
           ⚠ {summary.warning}
         </div>
       )}
 
-      {/* Üst başlık */}
-      <div style={styles.header}>
-        <div>
-          <h1 style={styles.title}>Harcama Özeti</h1>
-          {currentUser && (
-            <p style={styles.welcome}>Hoş geldin, {currentUser.fullName}</p>
-          )}
+      {/* Top nav */}
+      <header className="flex justify-between items-center px-5 md:px-8 py-4 border-b border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-sm sticky top-0 z-10">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">💰</span>
+          <span className="font-bold text-zinc-900 dark:text-zinc-100 tracking-tight text-lg">
+            Smart Budget
+          </span>
         </div>
-        <div style={styles.headerActions}>
-          <Link to="/upload" style={styles.uploadBtn}>+ Ekstre Yükle</Link>
-          <button onClick={handleLogout} style={styles.logoutBtn}>Çıkış</button>
+
+        {currentUser && (
+          <p className="hidden md:block text-sm text-zinc-500 dark:text-zinc-400">
+            Hoş geldin,{' '}
+            <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+              {currentUser.fullName}
+            </span>
+          </p>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+            title={theme === 'dark' ? 'Açık tema' : 'Koyu tema'}
+          >
+            {theme === 'dark'
+              ? <Sun size={17} strokeWidth={2} />
+              : <Moon size={17} strokeWidth={2} />
+            }
+          </button>
+
+          <Link
+            to="/upload"
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors"
+          >
+            <Upload size={13} strokeWidth={2.5} />
+            <span className="hidden sm:inline">Ekstre Yükle</span>
+            <span className="sm:hidden">Yükle</span>
+          </Link>
+
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <LogOut size={14} strokeWidth={2} />
+            <span className="hidden sm:inline">Çıkış</span>
+          </button>
         </div>
+      </header>
+
+      {/* Page title */}
+      <div className="px-5 md:px-8 pt-7 pb-1">
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
+          Harcama Özeti
+        </h1>
+        {currentUser && (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5 md:hidden">
+            Hoş geldin, {currentUser.fullName}
+          </p>
+        )}
       </div>
 
-      {/* Üst grid: Toplam kart + Serena */}
-      <div style={styles.topGrid}>
-        <div style={styles.card}>
-          <p style={styles.cardLabel}>Toplam Harcama</p>
-          <p style={styles.cardAmount}>
-            {Number(summary.totalSpending).toLocaleString('tr-TR', {
-              style: 'currency',
-              currency: 'TRY',
-            })}
-          </p>
-          <p style={styles.cardSub}>
-            {transactions.length} işlem &bull;{' '}
-            {Object.keys(summary.categoryBreakdown || {}).length} kategori
-          </p>
+      <main className="px-5 md:px-8 space-y-5 mt-5">
+
+        {/* Top grid: Total spending + Serena */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-800 p-6">
+            <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-2">
+              Toplam Harcama
+            </p>
+            <p className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-none mb-3">
+              {Number(summary.totalSpending).toLocaleString('tr-TR', {
+                style: 'currency', currency: 'TRY',
+              })}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500">
+              <span className="inline-flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                {transactions.length} işlem
+              </span>
+              <span className="inline-flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                {Object.keys(summary.categoryBreakdown || {}).length} kategori
+              </span>
+            </div>
+          </div>
+
+          <SerenaInsightCard summary={summary} />
         </div>
 
-        <SerenaInsightCard summary={summary} />
-      </div>
-
-      {/* Coach kartı — tam genişlik */}
-      <div style={styles.coachRow}>
+        {/* Coach card */}
         <CoachCard summary={summary} />
-      </div>
 
-      {/* Abonelik kartı — tam genişlik */}
-      <div style={styles.coachRow}>
+        {/* Subscription card */}
         <SubscriptionCard />
-      </div>
 
-      {/* Pasta grafik */}
-      {pieData.length > 0 && (
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Kategori Dağılımı</h2>
-          <ResponsiveContainer width="100%" height={320}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                cx="50%"
-                cy="50%"
-                outerRadius={110}
-                dataKey="value"
-                label={({ name, percent }) =>
-                  `${name} %${(percent * 100).toFixed(0)}`
-                }
-              >
-                {pieData.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(v) =>
-                  Number(v).toLocaleString('tr-TR', {
-                    style: 'currency',
-                    currency: 'TRY',
-                  })
-                }
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+        {/* Pie chart */}
+        {pieData.length > 0 && (
+          <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-800 p-6">
+            <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest mb-5">
+              Kategori Dağılımı
+            </h2>
+            <ResponsiveContainer width="100%" height={320}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={110}
+                  dataKey="value"
+                  strokeWidth={2}
+                  stroke={theme === 'dark' ? '#18181b' : '#f9fafb'}
+                  label={({ name, percent }) =>
+                    `${name} %${(percent * 100).toFixed(0)}`
+                  }
+                  labelLine={{
+                    stroke: theme === 'dark' ? '#52525b' : '#a1a1aa',
+                    strokeWidth: 1,
+                  }}
+                >
+                  {pieData.map((_, i) => (
+                    <Cell
+                      key={i}
+                      fill={COLORS[i % COLORS.length]}
+                      opacity={0.9}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(value) => (
+                    <span style={{
+                      color: theme === 'dark' ? '#a1a1aa' : '#71717a',
+                      fontSize: '12px',
+                    }}>
+                      {value}
+                    </span>
+                  )}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Transactions */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-800 p-6">
+          <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest mb-4">
+            İşlemler
+          </h2>
+          <TransactionsTable transactions={transactions} />
         </div>
-      )}
 
-      {/* İşlemler tablosu */}
-      <div style={styles.section}>
-        <h2 style={styles.sectionTitle}>İşlemler</h2>
-        <TransactionsTable transactions={transactions} />
-      </div>
+      </main>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: '100vh',
-    background: '#f9fafb',
-    fontFamily: 'system-ui, sans-serif',
-    paddingBottom: '48px',
-  },
-  centered: {
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: '100vh',
-  },
-  warningBar: {
-    background: '#ef4444',
-    color: '#fff',
-    padding: '12px 24px',
-    fontSize: '15px',
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: '24px 32px 0',
-  },
-  title: {
-    margin: '0 0 2px',
-    fontSize: '26px',
-    fontWeight: '700',
-    color: '#111827',
-  },
-  welcome: {
-    margin: 0,
-    fontSize: '13px',
-    color: '#6b7280',
-  },
-  headerActions: {
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'center',
-  },
-  uploadBtn: {
-    background: '#6366f1',
-    color: '#fff',
-    padding: '10px 20px',
-    borderRadius: '8px',
-    textDecoration: 'none',
-    fontSize: '14px',
-    fontWeight: '600',
-  },
-  logoutBtn: {
-    background: 'transparent',
-    color: '#6b7280',
-    border: '1px solid #d1d5db',
-    padding: '9px 16px',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '500',
-    cursor: 'pointer',
-  },
-  topGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '20px',
-    margin: '20px 32px 0',
-  },
-  card: {
-    background: '#fff',
-    borderRadius: '12px',
-    padding: '28px 32px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  cardLabel: {
-    margin: '0 0 6px',
-    fontSize: '12px',
-    color: '#6b7280',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-  },
-  cardAmount: {
-    margin: '0 0 8px',
-    fontSize: '38px',
-    fontWeight: '700',
-    color: '#111827',
-    letterSpacing: '-1px',
-  },
-  cardSub: {
-    margin: 0,
-    fontSize: '13px',
-    color: '#9ca3af',
-  },
-  coachRow: {
-    margin: '20px 32px 0',
-  },
-  section: {
-    margin: '24px 32px 0',
-    background: '#fff',
-    borderRadius: '12px',
-    padding: '24px 28px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-  },
-  sectionTitle: {
-    margin: '0 0 16px',
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#374151',
-  },
-};

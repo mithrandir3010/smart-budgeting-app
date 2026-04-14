@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { uploadStatement } from '../api/client';
+import { useTheme } from '../context/ThemeContext';
+import { ArrowLeft, Sun, Moon, FileText, Upload } from 'lucide-react';
 
-/** Backend hata yanıtından okunabilir mesaj çıkarır.
- *  GlobalExceptionHandler JSON body: { message: "..." }
- *  StatementController plain string: "Dosya boş olamaz." */
 function extractMessage(data) {
   if (!data) return 'Yükleme sırasında bir hata oluştu.';
   if (typeof data === 'string') return data;
@@ -13,9 +12,9 @@ function extractMessage(data) {
 }
 
 export default function UploadPage() {
+  const { theme, toggleTheme } = useTheme();
   const [file, setFile] = useState(null);
-  // type: 'success' | 'error' | 'duplicate'
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState(null); // { type: 'success'|'error'|'duplicate', message }
   const [loading, setLoading] = useState(false);
 
   const handleFileChange = (e) => {
@@ -35,10 +34,8 @@ export default function UploadPage() {
       setStatus({ type: 'error', message: 'Lütfen bir PDF dosyası seçin.' });
       return;
     }
-
     setLoading(true);
     setStatus(null);
-
     try {
       const res = await uploadStatement(file);
       setStatus({ type: 'success', message: res.data });
@@ -53,228 +50,119 @@ export default function UploadPage() {
     }
   };
 
-  const alertStyle = (() => {
-    if (!status) return null;
-    if (status.type === 'success')   return styles.alertSuccess;
-    if (status.type === 'duplicate') return styles.alertDuplicate;
-    return styles.alertError;
-  })();
-
-  const alertIcon = (() => {
-    if (!status) return '';
-    if (status.type === 'success')   return '✓ ';
-    if (status.type === 'duplicate') return '⚠ ';
-    return '✕ ';
-  })();
+  const alertConfig = {
+    success:   { cls: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900', icon: '✓' },
+    error:     { cls: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900',                   icon: '✕' },
+    duplicate: { cls: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900',             icon: '⚠' },
+  };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-        <div style={styles.topBar}>
-          <Link to="/" style={styles.backLink}>
-            ← Dashboard'a Dön
-          </Link>
-        </div>
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex justify-center px-4 py-10 transition-colors">
 
-        <h1 style={styles.title}>Ekstre Yükle</h1>
-        <p style={styles.subtitle}>
-          Banka ekstrenizi PDF formatında yükleyin. Harcamalar otomatik olarak
-          analiz edilecektir.
+      <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 p-2 rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+        title={theme === 'dark' ? 'Açık tema' : 'Koyu tema'}
+      >
+        {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+      </button>
+
+      <div className="w-full max-w-lg">
+
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 mb-7 transition-colors"
+        >
+          <ArrowLeft size={15} strokeWidth={2.5} />
+          Dashboard'a Dön
+        </Link>
+
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight mb-2">
+          Ekstre Yükle
+        </h1>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed mb-7">
+          Banka ekstrenizi PDF formatında yükleyin. Harcamalar otomatik olarak analiz edilecektir.
         </p>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <label style={styles.dropZone}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+
+          {/* Drop zone */}
+          <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-indigo-400 dark:hover:border-indigo-500 rounded-xl p-12 bg-white dark:bg-zinc-900 cursor-pointer transition-colors text-center">
             <input
               type="file"
               accept="application/pdf"
               onChange={handleFileChange}
-              style={{ display: 'none' }}
+              className="hidden"
             />
-            <div style={styles.dropIcon}>📄</div>
             {file ? (
               <>
-                <p style={styles.fileName}>{file.name}</p>
-                <p style={styles.fileSize}>
+                <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl flex items-center justify-center mb-3">
+                  <FileText size={24} className="text-indigo-500" strokeWidth={1.8} />
+                </div>
+                <p className="font-semibold text-sm text-zinc-800 dark:text-zinc-200 break-all mb-1">
+                  {file.name}
+                </p>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">
                   {(file.size / 1024).toFixed(1)} KB
                 </p>
               </>
             ) : (
               <>
-                <p style={styles.dropText}>PDF dosyasını seçin</p>
-                <p style={styles.dropHint}>veya buraya sürükleyip bırakın</p>
+                <div className="w-12 h-12 bg-zinc-100 dark:bg-zinc-800 rounded-xl flex items-center justify-center mb-3">
+                  <Upload size={22} className="text-zinc-400" strokeWidth={1.8} />
+                </div>
+                <p className="font-semibold text-sm text-zinc-700 dark:text-zinc-300 mb-1">
+                  PDF dosyasını seçin
+                </p>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                  veya buraya sürükleyip bırakın
+                </p>
               </>
             )}
           </label>
 
-          {status && (
-            <div style={alertStyle}>
-              <span style={{ fontWeight: '700' }}>{alertIcon}</span>
-              {status.message}
-            </div>
-          )}
+          {/* Status alert */}
+          {status && (() => {
+            const { cls, icon } = alertConfig[status.type] || alertConfig.error;
+            return (
+              <div className={`border rounded-xl px-4 py-3 text-sm leading-relaxed ${cls}`}>
+                <span className="font-bold mr-1">{icon}</span>
+                {status.message}
+              </div>
+            );
+          })()}
 
           <button
             type="submit"
             disabled={loading || !file}
-            style={{
-              ...styles.submitBtn,
-              opacity: loading || !file ? 0.6 : 1,
-              cursor: loading || !file ? 'not-allowed' : 'pointer',
-            }}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl text-sm transition-colors"
           >
             {loading ? 'İşleniyor...' : 'Ekstreyi Yükle'}
           </button>
         </form>
 
-        {/* Bilgi notu */}
-        <div style={styles.infoBox}>
-          <p style={styles.infoTitle}>Nasıl çalışır?</p>
-          <ul style={styles.infoList}>
-            <li>Aynı dosyayı tekrar yüklerseniz sistem bunu otomatik tespit eder.</li>
-            <li>Aynı dönemi kapsayan farklı bir dosya yüklemeye çalışırsanız uyarı alırsınız.</li>
-            <li>Abonelikler (Netflix, Spotify vb.) otomatik olarak işaretlenir.</li>
+        {/* Info box */}
+        <div className="mt-8 bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-xl p-5">
+          <p className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest mb-3">
+            Nasıl çalışır?
+          </p>
+          <ul className="space-y-2">
+            {[
+              'Aynı dosyayı tekrar yüklerseniz sistem bunu otomatik tespit eder.',
+              'Aynı dönemi kapsayan farklı bir dosya yüklemeye çalışırsanız uyarı alırsınız.',
+              'Abonelikler (Netflix, Spotify vb.) otomatik olarak işaretlenir.',
+            ].map((item, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+                <span className="w-4 h-4 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center font-bold flex-shrink-0 mt-0.5 text-[10px]">
+                  {i + 1}
+                </span>
+                {item}
+              </li>
+            ))}
           </ul>
         </div>
+
       </div>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: '100vh',
-    background: '#f9fafb',
-    fontFamily: 'system-ui, sans-serif',
-    display: 'flex',
-    justifyContent: 'center',
-    padding: '40px 16px',
-  },
-  container: {
-    width: '100%',
-    maxWidth: '520px',
-  },
-  topBar: {
-    marginBottom: '24px',
-  },
-  backLink: {
-    color: '#6366f1',
-    textDecoration: 'none',
-    fontSize: '14px',
-    fontWeight: '500',
-  },
-  title: {
-    margin: '0 0 8px',
-    fontSize: '28px',
-    fontWeight: '700',
-    color: '#111827',
-  },
-  subtitle: {
-    margin: '0 0 28px',
-    fontSize: '15px',
-    color: '#6b7280',
-    lineHeight: '1.5',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  dropZone: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '2px dashed #d1d5db',
-    borderRadius: '12px',
-    padding: '48px 24px',
-    background: '#fff',
-    cursor: 'pointer',
-    transition: 'border-color 0.2s',
-    textAlign: 'center',
-  },
-  dropIcon: {
-    fontSize: '48px',
-    marginBottom: '12px',
-  },
-  dropText: {
-    margin: '0 0 4px',
-    fontSize: '16px',
-    fontWeight: '600',
-    color: '#374151',
-  },
-  dropHint: {
-    margin: 0,
-    fontSize: '13px',
-    color: '#9ca3af',
-  },
-  fileName: {
-    margin: '0 0 4px',
-    fontSize: '15px',
-    fontWeight: '600',
-    color: '#111827',
-    wordBreak: 'break-all',
-  },
-  fileSize: {
-    margin: 0,
-    fontSize: '13px',
-    color: '#6b7280',
-  },
-  alertSuccess: {
-    background: '#d1fae5',
-    color: '#065f46',
-    border: '1px solid #6ee7b7',
-    borderRadius: '8px',
-    padding: '12px 16px',
-    fontSize: '14px',
-    lineHeight: '1.5',
-  },
-  alertError: {
-    background: '#fee2e2',
-    color: '#991b1b',
-    border: '1px solid #fca5a5',
-    borderRadius: '8px',
-    padding: '12px 16px',
-    fontSize: '14px',
-    lineHeight: '1.5',
-  },
-  alertDuplicate: {
-    background: '#fffbeb',
-    color: '#92400e',
-    border: '1px solid #fcd34d',
-    borderRadius: '8px',
-    padding: '12px 16px',
-    fontSize: '14px',
-    lineHeight: '1.5',
-  },
-  submitBtn: {
-    background: '#6366f1',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '14px',
-    fontSize: '16px',
-    fontWeight: '600',
-    transition: 'opacity 0.2s',
-  },
-  infoBox: {
-    marginTop: '28px',
-    background: '#f3f4f6',
-    borderRadius: '10px',
-    padding: '16px 20px',
-  },
-  infoTitle: {
-    margin: '0 0 8px',
-    fontSize: '13px',
-    fontWeight: '700',
-    color: '#374151',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  infoList: {
-    margin: 0,
-    paddingLeft: '18px',
-    fontSize: '13px',
-    color: '#6b7280',
-    lineHeight: '1.8',
-  },
-};

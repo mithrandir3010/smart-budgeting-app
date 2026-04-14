@@ -81,7 +81,19 @@
       "Bash(break)",
       "Bash(pkill -f \"spring-boot:run\")",
       "Bash(pkill -f \"SmartBudgetApplication\")",
-      "Bash(./mvnw spring-boot:run -q)"
+      "Bash(./mvnw spring-boot:run -q)",
+      "Bash(git stash:*)",
+      "Bash(uvx --version)",
+      "Bash(python3.13 --version)",
+      "Bash(python3.12 --version)",
+      "Bash(python3.11 --version)",
+      "Bash(uvx -p 3.13 --from \"git+https://github.com/oraios/serena\" serena-mcp-server --help)",
+      "Bash(timeout 15 uvx -p 3.13 --from \"git+https://github.com/oraios/serena\" serena)",
+      "Bash(timeout 10 uvx *)",
+      "Bash(timeout 20 uvx -p 3.13 --from \"git+https://github.com/oraios/serena\" serena start-mcp-server --project-from-cwd --context desktop-app)",
+      "mcp__serena__activate_project",
+      "mcp__serena__list_dir",
+      "mcp__serena__get_symbols_overview"
     ]
   }
 }

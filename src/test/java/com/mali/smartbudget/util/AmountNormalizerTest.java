@@ -83,12 +83,12 @@ class AmountNormalizerTest {
 
     @ParameterizedTest(name = "[{index}] \"{0}\" → {1}")
     @CsvSource({
-        "₺1.234,56,  1234.56",
-        "TRY 89,99,  89.99",
-        "TL 100,00,  100.00",
-        "$1.234,56,  1234.56",
-        "€1.234,56,  1234.56",
-        "£1.234,56,  1234.56",
+        "'₺1.234,56',  1234.56",
+        "'TRY 89,99',  89.99",
+        "'TL 100,00',  100.00",
+        "'$1.234,56',  1234.56",
+        "'€1.234,56',  1234.56",
+        "'£1.234,56',  1234.56",
     })
     @DisplayName("Para birimi sembolleri soyulur, kalan tutar normalize edilir")
     void normalize_currencySymbols_strippedAndNormalized(String input, String expected) {
@@ -101,10 +101,10 @@ class AmountNormalizerTest {
 
     @ParameterizedTest(name = "[{index}] Türk: \"{0}\" → {1}")
     @CsvSource({
-        "1.234,56,       1234.56",
-        "12.500,00,      12500.00",
-        "1.000.000,00,   1000000.00",
-        "245,90,         245.90",
+        "'1.234,56',       1234.56",
+        "'12.500,00',      12500.00",
+        "'1.000.000,00',   1000000.00",
+        "'245,90',         245.90",
     })
     @DisplayName("Türk formatı (nokta=binlik, virgül=ondalık) doğru parse edilir")
     void normalize_turkishFormat_parsedCorrectly(String input, String expected) {
@@ -117,7 +117,7 @@ class AmountNormalizerTest {
 
     @ParameterizedTest(name = "[{index}] US: \"{0}\" → {1}")
     @CsvSource({
-        "1.234,56,     1234.56",   // (same as Turkish in dual-separator case)
+        "'1.234,56',   1234.56",   // (same as Turkish in dual-separator case)
         "1234.56,      1234.56",
         "12500.00,     12500.00",
     })
@@ -132,10 +132,10 @@ class AmountNormalizerTest {
 
     @ParameterizedTest(name = "[{index}] Virgüllü: \"{0}\" → {1}")
     @CsvSource({
-        "1234,56,   1234.56",
-        "89,50,     89.50",
-        "0,99,      0.99",
-        "89,5,      89.50",    // tek ondalık basamak
+        "'1234,56',   1234.56",
+        "'89,50',     89.50",
+        "'0,99',      0.99",
+        "'89,5',      89.50",    // tek ondalık basamak
     })
     @DisplayName("Sadece virgüllü ondalık format doğru parse edilir")
     void normalize_plainCommaDecimal_parsedCorrectly(String input, String expected) {

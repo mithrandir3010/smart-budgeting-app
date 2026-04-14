@@ -1,23 +1,17 @@
 const CATEGORY_COLORS = {
-  'Kira':    { bg: '#ede9fe', text: '#6d28d9' },
-  'Market':  { bg: '#d1fae5', text: '#065f46' },
-  'Kafe':    { bg: '#fef3c7', text: '#92400e' },
-  'Fatura':  { bg: '#dbeafe', text: '#1e40af' },
-  'Ulaşım':  { bg: '#fce7f3', text: '#9d174d' },
-  'Diğer':   { bg: '#f3f4f6', text: '#374151' },
+  'Kira':    'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  'Market':  'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  'Kafe':    'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  'Fatura':  'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  'Ulaşım':  'bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300',
+  'Yemek':   'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300',
+  'Diğer':   'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
 };
 
-function categoryBadge(category) {
-  const c = CATEGORY_COLORS[category] || CATEGORY_COLORS['Diğer'];
+function CategoryBadge({ category }) {
+  const cls = CATEGORY_COLORS[category] || CATEGORY_COLORS['Diğer'];
   return (
-    <span style={{
-      background: c.bg,
-      color: c.text,
-      padding: '2px 10px',
-      borderRadius: '9999px',
-      fontSize: '12px',
-      fontWeight: '600',
-    }}>
+    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${cls}`}>
       {category || 'Diğer'}
     </span>
   );
@@ -26,7 +20,9 @@ function categoryBadge(category) {
 export default function TransactionsTable({ transactions }) {
   if (!transactions || transactions.length === 0) {
     return (
-      <div style={styles.empty}>Gösterilecek işlem bulunamadı.</div>
+      <p className="text-center py-10 text-sm text-zinc-400 dark:text-zinc-500">
+        Gösterilecek işlem bulunamadı.
+      </p>
     );
   }
 
@@ -35,12 +31,17 @@ export default function TransactionsTable({ transactions }) {
   );
 
   return (
-    <div style={styles.wrapper}>
-      <table style={styles.table}>
+    <div className="overflow-x-auto rounded-xl border border-zinc-100 dark:border-zinc-800">
+      <table className="w-full text-sm border-collapse">
         <thead>
-          <tr>
+          <tr className="bg-zinc-50 dark:bg-zinc-800/60">
             {['Tarih', 'Açıklama', 'Kategori', 'Tutar'].map((h) => (
-              <th key={h} style={styles.th}>{h}</th>
+              <th
+                key={h}
+                className="px-4 py-3 text-left text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest border-b border-zinc-100 dark:border-zinc-800"
+              >
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
@@ -48,26 +49,22 @@ export default function TransactionsTable({ transactions }) {
           {sorted.map((tx, i) => (
             <tr
               key={i}
-              style={{
-                ...styles.tr,
-                background: i % 2 === 0 ? '#fff' : '#f9fafb',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#eff6ff';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background =
-                  i % 2 === 0 ? '#fff' : '#f9fafb';
-              }}
+              className={`transition-colors hover:bg-indigo-50/60 dark:hover:bg-indigo-950/20 ${
+                i % 2 === 0
+                  ? 'bg-white dark:bg-zinc-900'
+                  : 'bg-zinc-50/50 dark:bg-zinc-900/40'
+              }`}
             >
-              <td style={styles.td}>
+              <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 border-b border-zinc-50 dark:border-zinc-800/50 whitespace-nowrap font-mono text-xs">
                 {new Date(tx.date).toLocaleDateString('tr-TR')}
               </td>
-              <td style={{ ...styles.td, color: '#111827', fontWeight: '500' }}>
+              <td className="px-4 py-3 font-medium text-zinc-800 dark:text-zinc-200 border-b border-zinc-50 dark:border-zinc-800/50">
                 {tx.description || '—'}
               </td>
-              <td style={styles.td}>{categoryBadge(tx.category)}</td>
-              <td style={{ ...styles.td, textAlign: 'right', fontWeight: '600', color: '#111827' }}>
+              <td className="px-4 py-3 border-b border-zinc-50 dark:border-zinc-800/50">
+                <CategoryBadge category={tx.category} />
+              </td>
+              <td className="px-4 py-3 text-right font-semibold text-zinc-800 dark:text-zinc-200 border-b border-zinc-50 dark:border-zinc-800/50 whitespace-nowrap tabular-nums">
                 {Number(tx.amount).toLocaleString('tr-TR', {
                   style: 'currency',
                   currency: tx.currency || 'TRY',
@@ -80,42 +77,3 @@ export default function TransactionsTable({ transactions }) {
     </div>
   );
 }
-
-const styles = {
-  wrapper: {
-    overflowX: 'auto',
-    borderRadius: '8px',
-    border: '1px solid #e5e7eb',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: '14px',
-  },
-  th: {
-    padding: '12px 16px',
-    textAlign: 'left',
-    fontSize: '11px',
-    fontWeight: '700',
-    color: '#6b7280',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    background: '#f3f4f6',
-    borderBottom: '1px solid #e5e7eb',
-  },
-  tr: {
-    transition: 'background 0.15s',
-  },
-  td: {
-    padding: '12px 16px',
-    borderBottom: '1px solid #f3f4f6',
-    color: '#6b7280',
-    verticalAlign: 'middle',
-  },
-  empty: {
-    padding: '32px',
-    textAlign: 'center',
-    color: '#9ca3af',
-    fontSize: '14px',
-  },
-};

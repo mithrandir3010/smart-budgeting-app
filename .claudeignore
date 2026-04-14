@@ -1,0 +1,6 @@
+target/
+frontend/node_modules/
+.claude/
+.vscode/
+.git/
+*.log

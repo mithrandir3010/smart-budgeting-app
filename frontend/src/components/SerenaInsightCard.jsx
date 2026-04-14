@@ -1,42 +1,27 @@
 /**
  * SerenaInsightCard
- *
- * Serena'nın koçluk mesajını görüntüler. Metin kaynağı olarak doğrudan
- * backend'deki AnalyticsService.buildCoachAdvice() çıktısını (summary.coachAdvice)
- * kullanır. Bu, MCP tool'u "serena_get_budget_summary" ile birebir aynı veridir —
- * ek bir hesaplama ya da harici API çağrısı yapılmaz.
- *
- * Görsel tasarım:
- *  - Uyarı modu  → kırmızı arka plan, sol kenar çizgisi, kırmızı metin
- *  - Normal mod  → yeşil arka plan, sol kenar çizgisi, yeşil metin
- *  - En yüksek kategori ikonu (categoryBreakdown'dan türetilir)
+ * Serena'nın koçluk mesajını görüntüler.
+ * Kaynak: summary.coachAdvice = AnalyticsService.buildCoachAdvice() = MCP serena_get_budget_summary
  */
 
 import {
-  Home,
-  ShoppingCart,
-  Coffee,
-  Zap,
-  Car,
-  ShoppingBag,
-  Utensils,
-  Wifi,
-  Smartphone,
+  Home, ShoppingCart, Coffee, Zap, Car,
+  ShoppingBag, Utensils, Wifi, Smartphone,
 } from 'lucide-react';
 
-const CATEGORY_ICONS = {
-  'Kira':      { Icon: Home,         color: '#6366f1' },
-  'Market':    { Icon: ShoppingCart, color: '#f59e0b' },
-  'Kafe':      { Icon: Coffee,       color: '#92400e' },
-  'Fatura':    { Icon: Zap,          color: '#0ea5e9' },
-  'Ulaşım':    { Icon: Car,          color: '#10b981' },
-  'Yemek':     { Icon: Utensils,     color: '#f97316' },
-  'İnternet':  { Icon: Wifi,         color: '#6366f1' },
-  'Telefon':   { Icon: Smartphone,   color: '#8b5cf6' },
-  'Diğer':     { Icon: ShoppingBag,  color: '#8b5cf6' },
+const CATEGORY_MAP = {
+  'Kira':      { Icon: Home,         color: 'text-indigo-500', bg: 'bg-indigo-100 dark:bg-indigo-900/40' },
+  'Market':    { Icon: ShoppingCart, color: 'text-amber-500',  bg: 'bg-amber-100 dark:bg-amber-900/40' },
+  'Kafe':      { Icon: Coffee,       color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/40' },
+  'Fatura':    { Icon: Zap,          color: 'text-sky-500',    bg: 'bg-sky-100 dark:bg-sky-900/40' },
+  'Ulaşım':    { Icon: Car,          color: 'text-emerald-500',bg: 'bg-emerald-100 dark:bg-emerald-900/40' },
+  'Yemek':     { Icon: Utensils,     color: 'text-orange-500', bg: 'bg-orange-100 dark:bg-orange-900/40' },
+  'İnternet':  { Icon: Wifi,         color: 'text-indigo-500', bg: 'bg-indigo-100 dark:bg-indigo-900/40' },
+  'Telefon':   { Icon: Smartphone,   color: 'text-violet-500', bg: 'bg-violet-100 dark:bg-violet-900/40' },
+  'Diğer':     { Icon: ShoppingBag,  color: 'text-violet-500', bg: 'bg-violet-100 dark:bg-violet-900/40' },
 };
 
-const DEFAULT_ICON = { Icon: ShoppingBag, color: '#8b5cf6' };
+const DEFAULT_ICON = { Icon: ShoppingBag, color: 'text-violet-500', bg: 'bg-violet-100 dark:bg-violet-900/40' };
 
 function topCategory(categoryBreakdown) {
   const entries = Object.entries(categoryBreakdown || {});
@@ -47,124 +32,55 @@ function topCategory(categoryBreakdown) {
 export default function SerenaInsightCard({ summary }) {
   if (!summary) return null;
 
-  // ── Kaynak: backend'den gelen hesaplanmış metin ──────────────────────────
-  // coachAdvice = AnalyticsService.buildCoachAdvice() = MCP serena_get_budget_summary
-  const text        = summary.coachAdvice ?? 'Ekstre yükledikçe sana özel öneriler sunacağım.';
-  const isWarning   = !!summary.warning;
-  const accentColor = isWarning ? '#ef4444' : '#10b981';
+  const text      = summary.coachAdvice ?? 'Ekstre yükledikçe sana özel öneriler sunacağım.';
+  const isWarning = !!summary.warning;
 
-  // En yüksek harcama kategorisinin ikonu
-  const top             = topCategory(summary.categoryBreakdown);
-  const topName         = top?.[0] ?? null;
-  const { Icon, color } = CATEGORY_ICONS[topName] ?? DEFAULT_ICON;
+  const top               = topCategory(summary.categoryBreakdown);
+  const topName           = top?.[0] ?? null;
+  const { Icon, color, bg } = CATEGORY_MAP[topName] ?? DEFAULT_ICON;
 
   return (
-    <div style={{
-      ...styles.card,
-      borderLeft: `4px solid ${accentColor}`,
-      background: isWarning ? '#fff5f5' : '#f0fdf4',
-    }}>
+    <div className={`rounded-xl border-l-4 p-5 shadow-sm transition-colors ${
+      isWarning
+        ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-500'
+        : 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-500'
+    }`}>
 
-      {/* Kart başlığı: kategori ikonu + Serena kimliği */}
-      <div style={styles.header}>
+      {/* Başlık */}
+      <div className="flex items-center gap-3 mb-3">
         {topName && (
-          <div style={{
-            ...styles.categoryIconWrap,
-            background: `${color}18`,
-          }}>
-            <Icon size={36} color={color} strokeWidth={1.8} />
+          <div className={`flex items-center justify-center w-14 h-14 rounded-2xl flex-shrink-0 ${bg}`}>
+            <Icon size={30} className={color} strokeWidth={1.8} />
           </div>
         )}
 
-        <div style={styles.identity}>
-          <div style={styles.nameRow}>
-            <span style={{ ...styles.statusDot, background: accentColor }} />
-            <p style={styles.name}>Serena</p>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              isWarning ? 'bg-rose-500' : 'bg-emerald-500'
+            }`} />
+            <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100">Serena</p>
           </div>
-          <p style={styles.role}>AI Finansal Koçun</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 pl-3.5">AI Finansal Koçun</p>
         </div>
 
-        {/* MCP kaynak rozeti */}
-        <div style={{ ...styles.sourceBadge, color: accentColor, borderColor: `${accentColor}40` }}>
+        <span className={`text-xs font-semibold border rounded-full px-2.5 py-0.5 flex-shrink-0 ${
+          isWarning
+            ? 'text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-800'
+            : 'text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800'
+        }`}>
           MCP analizi
-        </div>
+        </span>
       </div>
 
-      {/* Koçluk metni — tek kaynak: summary.coachAdvice */}
-      <p style={{
-        ...styles.text,
-        color: isWarning ? '#7f1d1d' : '#14532d',
-      }}>
+      {/* Koçluk metni */}
+      <p className={`text-sm leading-relaxed italic ${
+        isWarning
+          ? 'text-rose-800 dark:text-rose-300'
+          : 'text-emerald-800 dark:text-emerald-300'
+      }`}>
         {text}
       </p>
     </div>
   );
 }
-
-const styles = {
-  card: {
-    borderRadius: '12px',
-    padding: '20px 24px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '14px',
-    marginBottom: '14px',
-  },
-  categoryIconWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '60px',
-    height: '60px',
-    borderRadius: '14px',
-    flexShrink: 0,
-  },
-  identity: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    flex: 1,
-  },
-  nameRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  statusDot: {
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    flexShrink: 0,
-  },
-  name: {
-    margin: 0,
-    fontWeight: '700',
-    fontSize: '15px',
-    color: '#111827',
-  },
-  role: {
-    margin: 0,
-    fontSize: '12px',
-    color: '#6b7280',
-    paddingLeft: '14px',
-  },
-  sourceBadge: {
-    fontSize: '10px',
-    fontWeight: '600',
-    border: '1px solid',
-    borderRadius: '999px',
-    padding: '2px 8px',
-    letterSpacing: '0.04em',
-    whiteSpace: 'nowrap',
-    flexShrink: 0,
-  },
-  text: {
-    margin: 0,
-    fontSize: '14px',
-    lineHeight: '1.65',
-    fontStyle: 'italic',
-  },
-};

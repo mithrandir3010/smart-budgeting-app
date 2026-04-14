@@ -1,19 +1,26 @@
 package com.mali.smartbudget.controller;
 
+import com.mali.smartbudget.config.PasswordEncoderConfig;
+import com.mali.smartbudget.config.SecurityConfig;
 import com.mali.smartbudget.dto.AnalyticsSummaryDto;
 import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.model.User;
+import com.mali.smartbudget.security.JwtAuthenticationFilter;
+import com.mali.smartbudget.security.JwtService;
 import com.mali.smartbudget.service.AnalyticsService;
 import com.mali.smartbudget.service.TransactionService;
+import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -23,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -31,12 +39,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * AnalyticsController katman testi.
  *
- * <p>JWT filtreleri devre dışı ({@code addFilters = false}); kimlik doğrulama
- * {@code authentication()} post-processor ile SecurityContext'e enjekte edilir.
- * Controller artık userId'yi request parametresinden değil, {@code @AuthenticationPrincipal}'dan alır.
+ * <p>Spring Security 6 ile uyumlu test kurulumu:
+ * SecurityConfig + PasswordEncoderConfig import edilir, JwtAuthenticationFilter mock'u
+ * chain.doFilter() çağırarak pass-through davranışı sergiler.
+ * Kimlik doğrulama {@code authentication()} post-processor ile SecurityContext'e enjekte edilir.
  */
 @WebMvcTest(AnalyticsController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@Import({SecurityConfig.class, PasswordEncoderConfig.class})
 @DisplayName("AnalyticsController — Katman Testleri")
 class AnalyticsControllerTest {
 
@@ -47,12 +56,21 @@ class AnalyticsControllerTest {
     @Autowired private MockMvc mockMvc;
     @MockBean  private AnalyticsService analyticsService;
     @MockBean  private TransactionService transactionService;
+    @MockBean  private JwtService jwtService;
+    @MockBean  private JwtAuthenticationFilter jwtAuthenticationFilter;
+    @MockBean  private UserDetailsService userDetailsService;
 
     private User testUser;
     private UsernamePasswordAuthenticationToken auth;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        // JwtAuthenticationFilter mock: isteği durdurmaz, chain'e devam eder
+        Mockito.doAnswer(inv -> {
+            ((FilterChain) inv.getArgument(2)).doFilter(inv.getArgument(0), inv.getArgument(1));
+            return null;
+        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+
         testUser = User.builder()
                 .id(1L)
                 .username("mali")

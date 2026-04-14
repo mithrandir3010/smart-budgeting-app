@@ -2,22 +2,22 @@ import { useEffect, useState } from 'react';
 import { getSubscriptions } from '../api/client';
 
 const SERVICE_ICONS = {
-  netflix:  '🎬',
-  spotify:  '🎵',
-  icloud:   '☁️',
+  netflix:    '🎬',
+  spotify:    '🎵',
+  icloud:     '☁️',
   'apple tv': '📺',
-  youtube:  '▶️',
-  disney:   '🏰',
-  amazon:   '📦',
-  prime:    '📦',
-  dropbox:  '📂',
-  google:   '🔵',
-  onedrive: '☁️',
-  adobe:    '🎨',
-  microsoft:'💻',
-  gym:      '💪',
-  dergi:    '📰',
-  default:  '🔄',
+  youtube:    '▶️',
+  disney:     '🏰',
+  amazon:     '📦',
+  prime:      '📦',
+  dropbox:    '📂',
+  google:     '🔵',
+  onedrive:   '☁️',
+  adobe:      '🎨',
+  microsoft:  '💻',
+  gym:        '💪',
+  dergi:      '📰',
+  default:    '🔄',
 };
 
 function getIcon(description) {
@@ -28,6 +28,9 @@ function getIcon(description) {
   }
   return SERVICE_ICONS.default;
 }
+
+const formatTRY = (amount) =>
+  Number(amount).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
 
 export default function SubscriptionCard() {
   const [subscriptions, setSubscriptions] = useState([]);
@@ -45,56 +48,71 @@ export default function SubscriptionCard() {
     0
   );
 
-  const formatTRY = (amount) =>
-    Number(amount).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
-
   if (loading) {
     return (
-      <div style={styles.card}>
-        <p style={styles.loadingText}>Abonelikler yükleniyor...</p>
+      <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-800 border-l-4 border-l-violet-500 p-6">
+        <p className="text-sm text-zinc-400 dark:text-zinc-500">Abonelikler yükleniyor...</p>
       </div>
     );
   }
 
   return (
-    <div style={styles.card}>
+    <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-800 border-l-4 border-l-violet-500 p-6">
+
       {/* Başlık */}
-      <div style={styles.header}>
-        <div style={styles.titleGroup}>
-          <span style={styles.titleIcon}>🔄</span>
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center justify-center w-10 h-10 bg-violet-100 dark:bg-violet-900/40 rounded-xl text-lg flex-shrink-0">
+            🔄
+          </div>
           <div>
-            <p style={styles.label}>Aylık Abonelikler</p>
-            <p style={styles.subLabel}>Otomatik yenilenen ödemeler</p>
+            <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100">Aylık Abonelikler</p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">Otomatik yenilenen ödemeler</p>
           </div>
         </div>
-        <div style={styles.totalBox}>
-          <p style={styles.totalLabel}>Aylık Toplam</p>
-          <p style={styles.totalAmount}>{formatTRY(monthlyTotal)}</p>
+        <div className="text-right flex-shrink-0">
+          <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mb-0.5">
+            Aylık Toplam
+          </p>
+          <p className="text-xl font-bold text-violet-600 dark:text-violet-400 tracking-tight tabular-nums">
+            {formatTRY(monthlyTotal)}
+          </p>
         </div>
       </div>
 
-      {/* Rozet */}
-      <div style={styles.badgeRow}>
-        <span style={styles.badge}>{subscriptions.length} abonelik tespit edildi</span>
+      {/* Sayaç rozeti */}
+      <div className="mb-4">
+        <span className="inline-block bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+          {subscriptions.length} abonelik tespit edildi
+        </span>
       </div>
 
       {/* Liste */}
       {subscriptions.length === 0 ? (
-        <p style={styles.emptyText}>Abonelik bulunamadı.</p>
+        <p className="text-sm text-zinc-400 dark:text-zinc-500 italic">Abonelik bulunamadı.</p>
       ) : (
-        <div style={styles.list}>
+        <div className="flex flex-col gap-1.5">
           {subscriptions.map((sub, i) => (
-            <div key={i} style={styles.item}>
-              <div style={styles.itemLeft}>
-                <span style={styles.itemIcon}>{getIcon(sub.description)}</span>
+            <div
+              key={i}
+              className="flex justify-between items-center px-3 py-2.5 bg-zinc-50 dark:bg-zinc-800/50 hover:bg-violet-50 dark:hover:bg-violet-950/20 rounded-lg transition-colors"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="text-xl min-w-[24px] text-center leading-none">
+                  {getIcon(sub.description)}
+                </span>
                 <div>
-                  <p style={styles.itemName}>{sub.description}</p>
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                    {sub.description}
+                  </p>
                   {sub.category && (
-                    <p style={styles.itemCategory}>{sub.category}</p>
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500">{sub.category}</p>
                   )}
                 </div>
               </div>
-              <p style={styles.itemAmount}>{formatTRY(sub.amount)}</p>
+              <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300 whitespace-nowrap tabular-nums">
+                {formatTRY(sub.amount)}
+              </p>
             </div>
           ))}
         </div>
@@ -102,139 +120,10 @@ export default function SubscriptionCard() {
 
       {/* Alt not */}
       {subscriptions.length > 0 && (
-        <p style={styles.footerNote}>
+        <p className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-400 dark:text-zinc-500 italic">
           💡 Bu harcamalar ekstre yüklendiğinde AI tarafından otomatik tespit edildi.
         </p>
       )}
     </div>
   );
 }
-
-const styles = {
-  card: {
-    background: '#fff',
-    borderRadius: '12px',
-    padding: '24px 28px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-    borderLeft: '4px solid #8b5cf6',
-  },
-  loadingText: {
-    margin: 0,
-    color: '#9ca3af',
-    fontSize: '14px',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '12px',
-  },
-  titleGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
-  titleIcon: {
-    fontSize: '28px',
-    lineHeight: 1,
-  },
-  label: {
-    margin: '0 0 2px',
-    fontSize: '15px',
-    fontWeight: '700',
-    color: '#111827',
-  },
-  subLabel: {
-    margin: 0,
-    fontSize: '12px',
-    color: '#9ca3af',
-  },
-  totalBox: {
-    textAlign: 'right',
-  },
-  totalLabel: {
-    margin: '0 0 2px',
-    fontSize: '11px',
-    color: '#6b7280',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  totalAmount: {
-    margin: 0,
-    fontSize: '22px',
-    fontWeight: '700',
-    color: '#8b5cf6',
-    letterSpacing: '-0.5px',
-  },
-  badgeRow: {
-    marginBottom: '16px',
-  },
-  badge: {
-    display: 'inline-block',
-    background: '#f3f0ff',
-    color: '#7c3aed',
-    fontSize: '11px',
-    fontWeight: '600',
-    padding: '3px 10px',
-    borderRadius: '999px',
-    letterSpacing: '0.03em',
-  },
-  emptyText: {
-    margin: 0,
-    color: '#9ca3af',
-    fontSize: '14px',
-    fontStyle: 'italic',
-  },
-  list: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  item: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '10px 14px',
-    borderRadius: '8px',
-    background: '#fafafa',
-    transition: 'background 0.15s',
-  },
-  itemLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  itemIcon: {
-    fontSize: '20px',
-    lineHeight: 1,
-    minWidth: '24px',
-    textAlign: 'center',
-  },
-  itemName: {
-    margin: '0 0 2px',
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  itemCategory: {
-    margin: 0,
-    fontSize: '11px',
-    color: '#9ca3af',
-  },
-  itemAmount: {
-    margin: 0,
-    fontSize: '14px',
-    fontWeight: '700',
-    color: '#374151',
-    whiteSpace: 'nowrap',
-  },
-  footerNote: {
-    margin: '16px 0 0',
-    fontSize: '12px',
-    color: '#9ca3af',
-    fontStyle: 'italic',
-    borderTop: '1px solid #f3f4f6',
-    paddingTop: '12px',
-  },
-};

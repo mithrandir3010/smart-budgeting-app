@@ -1,18 +1,25 @@
 package com.mali.smartbudget.controller;
 
+import com.mali.smartbudget.config.PasswordEncoderConfig;
+import com.mali.smartbudget.config.SecurityConfig;
 import com.mali.smartbudget.exception.DuplicateStatementException;
 import com.mali.smartbudget.model.User;
+import com.mali.smartbudget.security.JwtAuthenticationFilter;
+import com.mali.smartbudget.security.JwtService;
 import com.mali.smartbudget.service.StatementService;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.io.IOException;
@@ -28,16 +35,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * StatementController katman testi.
  *
- * <p>Filtreler ({@code addFilters = false}) devre dışı — JWT doğrulama burada test edilmez;
- * bu sorumluluk {@code SecurityFilterTest}'e aittir. Kimlik doğrulama,
- * {@link org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors#authentication}
- * ile SecurityContextHolder üzerinden enjekte edilir.
+ * <p>Spring Security 6 uyumlu kurulum: SecurityConfig + PasswordEncoderConfig import edilir,
+ * JwtAuthenticationFilter mock'u chain.doFilter() çağırarak pass-through davranışı sergiler.
+ * JWT katmanı {@code SecurityIntegrationTest}'te ayrıca test edilir.
  *
  * <p>Kritik davranış: controller artık kullanıcı kimliğini request parametresinden değil,
  * {@code @AuthenticationPrincipal} aracılığıyla SecurityContext'ten alır.
  */
 @WebMvcTest(StatementController.class)
-@AutoConfigureMockMvc(addFilters = false)
+@Import({SecurityConfig.class, PasswordEncoderConfig.class})
 @DisplayName("StatementController — Katman Testleri")
 class StatementControllerTest {
 
@@ -48,12 +54,21 @@ class StatementControllerTest {
 
     @MockBean
     private StatementService statementService;
+    @MockBean private JwtService jwtService;
+    @MockBean private JwtAuthenticationFilter jwtAuthenticationFilter;
+    @MockBean private UserDetailsService userDetailsService;
 
     private User testUser;
     private UsernamePasswordAuthenticationToken auth;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        // JwtAuthenticationFilter mock: isteği durdurmaz, chain'e devam eder
+        Mockito.doAnswer(inv -> {
+            ((FilterChain) inv.getArgument(2)).doFilter(inv.getArgument(0), inv.getArgument(1));
+            return null;
+        }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+
         testUser = User.builder()
                 .id(1L)
                 .username("mali")
