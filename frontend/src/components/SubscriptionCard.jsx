@@ -29,14 +29,12 @@ function getIcon(description) {
   return SERVICE_ICONS.default;
 }
 
-const USER_ID = 1;
-
 export default function SubscriptionCard() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getSubscriptions(USER_ID)
+    getSubscriptions()
       .then((res) => setSubscriptions(res.data))
       .catch(() => setSubscriptions([]))
       .finally(() => setLoading(false));

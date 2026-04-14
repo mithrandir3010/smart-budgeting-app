@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { getAnalyticsSummary, getTransactions } from '../api/client';
+import { getAnalyticsSummary, getTransactions, clearAuth, getStoredUser } from '../api/client';
 import TransactionsTable from '../components/TransactionsTable';
 import SerenaInsightCard from '../components/SerenaInsightCard';
 import CoachCard from '../components/CoachCard';
@@ -14,18 +14,23 @@ const COLORS = [
   '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6',
 ];
 
-const USER_ID = 1;
-
 export default function DashboardPage() {
+  const navigate = useNavigate();
+  const currentUser = getStoredUser();
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login');
+  };
+
   useEffect(() => {
     Promise.all([
-      getAnalyticsSummary(USER_ID),
-      getTransactions(USER_ID),
+      getAnalyticsSummary(),
+      getTransactions(),
     ])
       .then(([summaryRes, txRes]) => {
         setSummary(summaryRes.data);
@@ -62,8 +67,16 @@ export default function DashboardPage() {
 
       {/* Üst başlık */}
       <div style={styles.header}>
-        <h1 style={styles.title}>Harcama Özeti</h1>
-        <Link to="/upload" style={styles.uploadBtn}>+ Ekstre Yükle</Link>
+        <div>
+          <h1 style={styles.title}>Harcama Özeti</h1>
+          {currentUser && (
+            <p style={styles.welcome}>Hoş geldin, {currentUser.fullName}</p>
+          )}
+        </div>
+        <div style={styles.headerActions}>
+          <Link to="/upload" style={styles.uploadBtn}>+ Ekstre Yükle</Link>
+          <button onClick={handleLogout} style={styles.logoutBtn}>Çıkış</button>
+        </div>
       </div>
 
       {/* Üst grid: Toplam kart + Serena */}
@@ -162,14 +175,24 @@ const styles = {
   header: {
     display: 'flex',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     padding: '24px 32px 0',
   },
   title: {
-    margin: 0,
+    margin: '0 0 2px',
     fontSize: '26px',
     fontWeight: '700',
     color: '#111827',
+  },
+  welcome: {
+    margin: 0,
+    fontSize: '13px',
+    color: '#6b7280',
+  },
+  headerActions: {
+    display: 'flex',
+    gap: '10px',
+    alignItems: 'center',
   },
   uploadBtn: {
     background: '#6366f1',
@@ -179,6 +202,16 @@ const styles = {
     textDecoration: 'none',
     fontSize: '14px',
     fontWeight: '600',
+  },
+  logoutBtn: {
+    background: 'transparent',
+    color: '#6b7280',
+    border: '1px solid #d1d5db',
+    padding: '9px 16px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
   },
   topGrid: {
     display: 'grid',

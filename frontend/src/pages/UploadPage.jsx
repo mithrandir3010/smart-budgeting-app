@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { uploadStatement } from '../api/client';
 
-const USER_ID = 1;
-
 /** Backend hata yanıtından okunabilir mesaj çıkarır.
  *  GlobalExceptionHandler JSON body: { message: "..." }
  *  StatementController plain string: "Dosya boş olamaz." */
@@ -42,7 +40,7 @@ export default function UploadPage() {
     setStatus(null);
 
     try {
-      const res = await uploadStatement(file, USER_ID);
+      const res = await uploadStatement(file);
       setStatus({ type: 'success', message: res.data });
       setFile(null);
       e.target.reset();
