@@ -75,7 +75,13 @@
       "Bash(psql -h localhost -p 5434 -U postgres -d smart_budget_db -c 'SELECT id, file_name, status, sha256_checksum IS NOT NULL as has_hash, period_start, period_end FROM statements ORDER BY id DESC LIMIT 3;')",
       "Bash(pkill -9 -f \"java.*smart-budgeting\")",
       "Bash(pkill -9 -f \"spring-boot:run\")",
-      "Bash(psql -h localhost -p 5434 -U postgres -d smart_budget_db -c 'SELECT id, file_name, status, LEFT\\(sha256_checksum,12\\)||'\\\\''...'\\\\'' AS checksum, period_start, period_end FROM statements;')"
+      "Bash(psql -h localhost -p 5434 -U postgres -d smart_budget_db -c 'SELECT id, file_name, status, LEFT\\(sha256_checksum,12\\)||'\\\\''...'\\\\'' AS checksum, period_start, period_end FROM statements;')",
+      "Bash(xargs basename:*)",
+      "Bash(npm install:*)",
+      "Bash(break)",
+      "Bash(pkill -f \"spring-boot:run\")",
+      "Bash(pkill -f \"SmartBudgetApplication\")",
+      "Bash(./mvnw spring-boot:run -q)"
     ]
   }
 }

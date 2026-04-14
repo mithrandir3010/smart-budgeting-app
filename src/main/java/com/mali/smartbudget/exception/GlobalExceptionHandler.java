@@ -5,6 +5,9 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -30,6 +33,28 @@ public class GlobalExceptionHandler {
         body.put("periodStart",    e.getPeriodStart() != null ? e.getPeriodStart().toString() : null);
         body.put("periodEnd",      e.getPeriodEnd()   != null ? e.getPeriodEnd().toString()   : null);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException e) {
+        log.warn("Hatalı giriş denemesi: {}", e.getMessage());
+        return build(HttpStatus.UNAUTHORIZED, "Kullanıcı adı veya şifre hatalı.");
+    }
+
+    @ExceptionHandler(UsernameNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleUsernameNotFound(UsernameNotFoundException e) {
+        log.warn("Kullanıcı bulunamadı: {}", e.getMessage());
+        return build(HttpStatus.UNAUTHORIZED, "Kullanıcı adı veya şifre hatalı.");
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException e) {
+        String firstError = e.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+                .orElse("Geçersiz istek verisi");
+        log.warn("Validasyon hatası: {}", firstError);
+        return build(HttpStatus.BAD_REQUEST, firstError);
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
