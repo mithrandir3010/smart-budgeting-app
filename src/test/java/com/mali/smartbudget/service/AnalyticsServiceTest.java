@@ -2,6 +2,7 @@ package com.mali.smartbudget.service;
 
 import com.mali.smartbudget.dto.AnalyticsSummaryDto;
 import com.mali.smartbudget.repository.TransactionRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -24,7 +27,17 @@ class AnalyticsServiceTest {
     private static final Long USER_ID = 1L;
 
     @Mock  private TransactionRepository transactionRepository;
+    @Mock  private BudgetLimitService    budgetLimitService;
     @InjectMocks private AnalyticsService analyticsService;
+
+    @BeforeEach
+    void stubBudgetLimitService() {
+        // Tüm testlerde boş uyarı listesi dönsün — BudgetLimitService davranışı ayrı test edilir
+        // lenient: computeDailyRate / buildCoachAdvice testleri getSummary çağırmaz, stub gerekmeyebilir
+        org.mockito.Mockito.lenient()
+                .when(budgetLimitService.computeAlerts(anyLong(), any()))
+                .thenReturn(List.of());
+    }
 
     // =========================================================================
     // Toplam harcama ve kategori dökümü

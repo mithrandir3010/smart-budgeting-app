@@ -1,6 +1,7 @@
 package com.mali.smartbudget.service;
 
 import com.mali.smartbudget.dto.AnalyticsSummaryDto;
+import com.mali.smartbudget.dto.BudgetAlertDto;
 import com.mali.smartbudget.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,13 +30,14 @@ public class AnalyticsService {
     private static final Set<String> FIXED_CATEGORIES = Set.of("Kira");
 
     private final TransactionRepository transactionRepository;
+    private final BudgetLimitService    budgetLimitService;
 
     /**
-     * Kullanıcının toplam harcamasını, kategori bazlı dökümünü ve AI koçluk
-     * tavsiyesini hesaplar.
+     * Kullanıcının toplam harcamasını, kategori bazlı dökümünü, AI koçluk
+     * tavsiyesini ve bütçe uyarılarını hesaplar.
      *
      * @param userId Analiz edilecek kullanıcının ID'si
-     * @return Toplam harcama, kategori dökümü, uyarı, koçluk tavsiyesi, tahmini harcama
+     * @return Toplam harcama, kategori dökümü, uyarı, koçluk tavsiyesi, tahmin, alerts
      */
     @Transactional(readOnly = true)
     public AnalyticsSummaryDto getSummary(Long userId) {
@@ -58,9 +60,9 @@ public class AnalyticsService {
             log.warn("Kullanıcı {} aylık limiti aştı: {} TL", userId, totalSpending);
         }
 
-        LocalDate today = LocalDate.now();
-        int dayOfMonth    = today.getDayOfMonth();
-        int daysInMonth   = today.lengthOfMonth();
+        LocalDate today       = LocalDate.now();
+        int dayOfMonth        = today.getDayOfMonth();
+        int daysInMonth       = today.lengthOfMonth();
 
         BigDecimal dailyRate         = computeDailyRate(totalSpending, dayOfMonth);
         BigDecimal projectedSpending = dailyRate.multiply(BigDecimal.valueOf(daysInMonth))
@@ -68,18 +70,23 @@ public class AnalyticsService {
         String coachAdvice = buildCoachAdvice(totalSpending, categoryBreakdown,
                                               projectedSpending, dayOfMonth);
 
-        log.info("Analiz tamamlandı. userId={}, toplam={} TL, tahmin={} TL, kategori sayısı={}",
-                userId, totalSpending, projectedSpending, categoryBreakdown.size());
+        // Kategori bazlı bütçe uyarıları — kullanıcı limit tanımlamışsa hesapla
+        List<BudgetAlertDto> alerts = budgetLimitService.computeAlerts(userId, categoryBreakdown);
+
+        log.info("Analiz tamamlandı. userId={}, toplam={} TL, tahmin={} TL, kategori={}, alert={}",
+                userId, totalSpending, projectedSpending,
+                categoryBreakdown.size(), alerts.size());
 
         return new AnalyticsSummaryDto(
                 totalSpending, categoryBreakdown, warning,
-                coachAdvice, MONTHLY_LIMIT, projectedSpending, dailyRate
+                coachAdvice, MONTHLY_LIMIT, projectedSpending, dailyRate,
+                alerts
         );
     }
 
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
     // Günlük harcama hızı
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
 
     BigDecimal computeDailyRate(BigDecimal totalSpending, int dayOfMonth) {
         if (dayOfMonth <= 0 || totalSpending.compareTo(BigDecimal.ZERO) == 0) {
@@ -88,9 +95,9 @@ public class AnalyticsService {
         return totalSpending.divide(BigDecimal.valueOf(dayOfMonth), 2, RoundingMode.HALF_UP);
     }
 
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
     // Koçluk tavsiyesi üretimi
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
 
     String buildCoachAdvice(BigDecimal totalSpending,
                             Map<String, BigDecimal> breakdown,
@@ -109,25 +116,23 @@ public class AnalyticsService {
                 .orElse(null);
 
         if (projected.compareTo(MONTHLY_LIMIT) > 0) {
-            BigDecimal overage        = projected.subtract(MONTHLY_LIMIT);
-            double     overagePct     = overage.divide(MONTHLY_LIMIT, 4, RoundingMode.HALF_UP)
-                                               .multiply(BigDecimal.valueOf(100))
-                                               .doubleValue();
+            BigDecimal overage    = projected.subtract(MONTHLY_LIMIT);
+            double overagePct     = overage.divide(MONTHLY_LIMIT, 4, RoundingMode.HALF_UP)
+                                           .multiply(BigDecimal.valueOf(100))
+                                           .doubleValue();
 
             String base = "Bu hızla gidersen ay sonu tahminen %s harcayacaksın — limitini %%%s aşacaksın."
                     .formatted(formatTRY(projected), "%.0f".formatted(overagePct));
 
             if (topVarCategory != null) {
-                BigDecimal topAmount  = breakdown.get(topVarCategory);
-                // Ne kadar kesinti yetecek?
-                BigDecimal needed = overage.min(topAmount);
+                BigDecimal topAmount = breakdown.get(topVarCategory);
+                BigDecimal needed    = overage.min(topAmount);
                 base += " \"%s\" harcamandan %s kısarsan hedefe ulaşırsın."
                         .formatted(topVarCategory, formatTRY(needed));
             }
             return base;
         }
 
-        // Limiti aşmayacak
         BigDecimal remaining = MONTHLY_LIMIT.subtract(projected);
         String base = "Ay sonu tahminin %s — limitinin %s altında kalıyorsun. Harika gidiyorsun!"
                 .formatted(formatTRY(projected), formatTRY(remaining));
@@ -139,12 +144,11 @@ public class AnalyticsService {
         return base;
     }
 
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
     // Yardımcı
-    // -------------------------------------------------------------------------
+    // ─────────────────────────────────────────────────────────────────────────
 
     private String formatTRY(BigDecimal amount) {
-        return "%,.2f TL".formatted(amount.doubleValue())
-                         .replace(",", ".");
+        return "%,.2f TL".formatted(amount.doubleValue()).replace(",", ".");
     }
 }

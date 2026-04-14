@@ -1,28 +1,42 @@
 import axios from 'axios';
+import { toast } from 'sonner';
 
 const client = axios.create({
   baseURL: 'http://localhost:8080',
   headers: { 'Content-Type': 'application/json' },
 });
 
-// ── Request interceptor: JWT token'ı her isteğe ekle ──────────────────────────
+// ── Request interceptor: JWT token'ı her isteğe ekle ─────────────────────────
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('jwt_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// ── Response interceptor: 401 → login sayfasına yönlendir ────────────────────
+// ── Response interceptor: hata kodlarını yakalayıp toast göster ──────────────
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status  = error.response?.status;
+    const message = error.response?.data?.message;
+
+    if (status === 401) {
       localStorage.removeItem('jwt_token');
       localStorage.removeItem('user_info');
-      window.location.href = '/login';
+      // Login sayfasındayken sonsuz döngü olmasın
+      if (!window.location.pathname.includes('/login')) {
+        toast.error('Oturum süreniz doldu, lütfen tekrar giriş yapın.');
+        setTimeout(() => { window.location.href = '/login'; }, 1500);
+      }
+    } else if (status === 409) {
+      toast.warning(message || 'Bu işlem zaten mevcut.');
+    } else if (status === 413) {
+      toast.error('Dosya boyutu çok büyük (max 2MB).');
+    } else if (status >= 500) {
+      toast.error('Sunucu hatası. Lütfen daha sonra tekrar deneyin.');
     }
+    // 400/422/404 hataları bileşen seviyesinde yönetilir (forma özel mesajlar)
+
     return Promise.reject(error);
   }
 );
@@ -34,7 +48,7 @@ export const register = (data) =>
 export const login = (data) =>
   client.post('/api/v1/auth/login', data);
 
-// ── Analytics (userId artık JWT'den geliyor) ──────────────────────────────────
+// ── Analytics ─────────────────────────────────────────────────────────────────
 export const getAnalyticsSummary = () =>
   client.get('/api/v1/analytics/summary');
 
@@ -43,6 +57,19 @@ export const getTransactions = () =>
 
 export const getSubscriptions = () =>
   client.get('/api/v1/analytics/subscriptions');
+
+// ── Budget Limits ─────────────────────────────────────────────────────────────
+export const getBudgetLimits = () =>
+  client.get('/api/v1/budget-limits');
+
+export const upsertBudgetLimit = (data) =>
+  client.post('/api/v1/budget-limits', data);
+
+export const deleteBudgetLimit = (id) =>
+  client.delete(`/api/v1/budget-limits/${id}`);
+
+export const getBudgetAlerts = () =>
+  client.get('/api/v1/budget-limits/alerts');
 
 // ── Statement ─────────────────────────────────────────────────────────────────
 export const uploadStatement = (file) => {
@@ -53,7 +80,7 @@ export const uploadStatement = (file) => {
   });
 };
 
-// ── Token yardımcıları ────────────────────────────────────────────────────────
+// ── Auth helpers ──────────────────────────────────────────────────────────────
 export const saveAuth = (token, userInfo) => {
   localStorage.setItem('jwt_token', token);
   localStorage.setItem('user_info', JSON.stringify(userInfo));

@@ -1,6 +1,7 @@
 package com.mali.smartbudget.dto;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -13,6 +14,7 @@ import java.util.Map;
  * @param monthlyBudget     Aylık bütçe limiti (varsayılan 10.000 TL)
  * @param projectedSpending Mevcut harcama hızıyla hesaplanan ay sonu tahmini
  * @param dailyRate         Günlük ortalama harcama hızı
+ * @param alerts            Kullanıcının kategori bazlı bütçe uyarıları (OK/WARNING/CRITICAL)
  */
 public record AnalyticsSummaryDto(
         BigDecimal totalSpending,
@@ -21,5 +23,6 @@ public record AnalyticsSummaryDto(
         String coachAdvice,
         BigDecimal monthlyBudget,
         BigDecimal projectedSpending,
-        BigDecimal dailyRate
+        BigDecimal dailyRate,
+        List<BudgetAlertDto> alerts
 ) {}
