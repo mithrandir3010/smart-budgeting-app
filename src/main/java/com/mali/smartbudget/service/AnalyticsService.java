@@ -131,7 +131,7 @@ public class AnalyticsService {
             if (topVarCategory != null) {
                 base += " En fazla harcama \"" + topVarCategory + "\" kategorisinde.";
             }
-            base += " Aylık bütçe hedefi belirleyerek Serena seni daha iyi koruyabilir.";
+            base += " Aylık bütçe hedefi belirleyerek harcamalarını daha iyi kontrol altına alabilirsin.";
             return base;
         }
 

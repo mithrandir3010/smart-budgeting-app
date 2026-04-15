@@ -6,7 +6,7 @@
 
 import {
   Home, ShoppingCart, Coffee, Zap, Car,
-  ShoppingBag, Utensils, Wifi, Smartphone,
+  ShoppingBag, Utensils, Wifi, Smartphone, Wallet,
 } from 'lucide-react';
 
 const CATEGORY_MAP = {
@@ -48,29 +48,23 @@ export default function SerenaInsightCard({ summary }) {
 
       {/* Başlık */}
       <div className="flex items-center gap-3 mb-3">
-        {topName && (
-          <div className={`flex items-center justify-center w-14 h-14 rounded-2xl flex-shrink-0 ${bg}`}>
-            <Icon size={30} className={color} strokeWidth={1.8} />
-          </div>
-        )}
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-              isWarning ? 'bg-rose-500' : 'bg-emerald-500'
-            }`} />
-            <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100">Serena</p>
-          </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 pl-3.5">AI Finansal Koçun</p>
+        <div className={`flex items-center justify-center w-14 h-14 rounded-2xl flex-shrink-0 ${
+          topName ? bg : 'bg-indigo-100 dark:bg-indigo-900/40'
+        }`}>
+          {topName
+            ? <Icon size={30} className={color} strokeWidth={1.8} />
+            : <Wallet size={28} className="text-indigo-500" strokeWidth={1.8} />
+          }
         </div>
 
-        <span className={`text-xs font-semibold border rounded-full px-2.5 py-0.5 flex-shrink-0 ${
-          isWarning
-            ? 'text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-800'
-            : 'text-emerald-600 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800'
-        }`}>
-          MCP analizi
-        </span>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+            Finansal Asistan
+          </p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+            Aylık bütçe hedefi belirleyerek harcamalarını daha iyi kontrol altına alabilirsin.
+          </p>
+        </div>
       </div>
 
       {/* Koçluk metni */}

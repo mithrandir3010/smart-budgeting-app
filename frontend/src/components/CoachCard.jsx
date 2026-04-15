@@ -102,8 +102,8 @@ function BudgetPromptCard({ hasData, onBudgetSet }) {
           </p>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
             {hasData
-              ? 'Aylık harcama limitini belirleyerek Serena\'nın seni korumasını sağlayabilirsin.'
-              : 'Henüz ekstre yüklemeden de limitini belirleyebilirsin — Serena veriler gelince seni izlemeye başlar.'}
+              ? 'Aylık bütçe hedefi belirleyerek harcamalarını daha iyi kontrol altına alabilirsin.'
+              : 'Henüz ekstre yüklemeden de limitini belirleyebilirsin — veriler gelince otomatik izleme başlar.'}
           </p>
         </div>
       </div>
