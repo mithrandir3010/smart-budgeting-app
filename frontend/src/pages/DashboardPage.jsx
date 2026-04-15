@@ -3,13 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { getAnalyticsSummary, getTransactions, clearAuth, getStoredUser } from '../api/client';
+import { getAnalyticsSummary, getTransactions, getBudgetAlerts, clearAuth, getStoredUser } from '../api/client';
 import TransactionsTable from '../components/TransactionsTable';
 import SerenaInsightCard from '../components/SerenaInsightCard';
 import CoachCard from '../components/CoachCard';
 import SubscriptionCard from '../components/SubscriptionCard';
+import BudgetGuard from '../components/BudgetGuard';
+import BudgetLimitModal from '../components/BudgetLimitModal';
 import { useTheme } from '../context/ThemeContext';
-import { Sun, Moon, Upload, LogOut } from 'lucide-react';
+import { Sun, Moon, Upload, LogOut, ShieldAlert } from 'lucide-react';
 
 const COLORS = [
   '#6366f1', '#f43f5e', '#10b981', '#f59e0b',
@@ -38,12 +40,23 @@ export default function DashboardPage() {
   const currentUser = getStoredUser();
   const [summary, setSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
 
   const handleLogout = () => {
     clearAuth();
     navigate('/login');
+  };
+
+  const fetchAlerts = async () => {
+    try {
+      const res = await getBudgetAlerts();
+      setAlerts(res.data);
+    } catch {
+      // Alerts are non-critical; silently ignore failures
+    }
   };
 
   useEffect(() => {
@@ -54,6 +67,8 @@ export default function DashboardPage() {
       })
       .catch(() => setError('Veriler yüklenirken bir hata oluştu.'))
       .finally(() => setLoading(false));
+
+    fetchAlerts();
   }, []);
 
   if (loading) {
@@ -117,6 +132,15 @@ export default function DashboardPage() {
             }
           </button>
 
+          <button
+            onClick={() => setShowLimitModal(true)}
+            className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            title="Bütçe limitleri"
+          >
+            <ShieldAlert size={14} strokeWidth={2} />
+            <span className="hidden sm:inline">Limitler</span>
+          </button>
+
           <Link
             to="/upload"
             className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors"
@@ -148,7 +172,18 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* Budget limit modal */}
+      {showLimitModal && (
+        <BudgetLimitModal
+          onClose={() => setShowLimitModal(false)}
+          onSaved={fetchAlerts}
+        />
+      )}
+
       <main className="px-5 md:px-8 space-y-5 mt-5">
+
+        {/* Budget Guard — alerts */}
+        {alerts.length > 0 && <BudgetGuard alerts={alerts} />}
 
         {/* Top grid: Total spending + Serena */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

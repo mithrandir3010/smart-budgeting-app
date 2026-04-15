@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { isAuthenticated } from './api/client';
 import { ThemeProvider } from './context/ThemeContext';
 import DashboardPage from './pages/DashboardPage';
@@ -17,6 +18,15 @@ function PublicRoute({ element }) {
 function App() {
   return (
     <ThemeProvider>
+      <Toaster
+        position="top-right"
+        richColors
+        closeButton
+        duration={4000}
+        toastOptions={{
+          style: { fontFamily: 'inherit' },
+        }}
+      />
       <BrowserRouter>
         <Routes>
           <Route path="/login"    element={<PublicRoute element={<LoginPage />} />} />

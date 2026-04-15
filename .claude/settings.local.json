@@ -93,7 +93,8 @@
       "Bash(timeout 20 uvx -p 3.13 --from \"git+https://github.com/oraios/serena\" serena start-mcp-server --project-from-cwd --context desktop-app)",
       "mcp__serena__activate_project",
       "mcp__serena__list_dir",
-      "mcp__serena__get_symbols_overview"
+      "mcp__serena__get_symbols_overview",
+      "Bash(npx vite *)"
     ]
   }
 }

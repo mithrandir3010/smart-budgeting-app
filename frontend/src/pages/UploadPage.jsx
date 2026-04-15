@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { uploadStatement } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { ArrowLeft, Sun, Moon, FileText, Upload } from 'lucide-react';
@@ -20,6 +21,7 @@ export default function UploadPage() {
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (selected && selected.type !== 'application/pdf') {
+      toast.error('Lütfen yalnızca PDF dosyası seçin.');
       setStatus({ type: 'error', message: 'Lütfen yalnızca PDF dosyası seçin.' });
       setFile(null);
       return;
@@ -31,6 +33,7 @@ export default function UploadPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file) {
+      toast.warning('Lütfen bir PDF dosyası seçin.');
       setStatus({ type: 'error', message: 'Lütfen bir PDF dosyası seçin.' });
       return;
     }
@@ -38,13 +41,24 @@ export default function UploadPage() {
     setStatus(null);
     try {
       const res = await uploadStatement(file);
-      setStatus({ type: 'success', message: res.data });
+      const msg = typeof res.data === 'string' ? res.data : 'Ekstre başarıyla yüklendi.';
+      toast.success(msg);
+      setStatus({ type: 'success', message: msg });
       setFile(null);
       e.target.reset();
     } catch (err) {
-      const isDuplicate = err.response?.status === 409;
+      const status = err.response?.status;
       const msg = extractMessage(err.response?.data);
-      setStatus({ type: isDuplicate ? 'duplicate' : 'error', message: msg });
+      if (status === 409) {
+        // toast handled by axios interceptor; just update inline status
+        setStatus({ type: 'duplicate', message: msg });
+      } else if (status !== 401 && status !== 413 && !(status >= 500)) {
+        // 401/413/5xx already handled by interceptor; show inline for others (400/422/404)
+        toast.error(msg);
+        setStatus({ type: 'error', message: msg });
+      } else {
+        setStatus({ type: 'error', message: msg });
+      }
     } finally {
       setLoading(false);
     }
