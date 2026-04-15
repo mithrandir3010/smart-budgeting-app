@@ -59,7 +59,15 @@ export default function TransactionsTable({ transactions }) {
                 {new Date(tx.date).toLocaleDateString('tr-TR')}
               </td>
               <td className="px-4 py-3 font-medium text-zinc-800 dark:text-zinc-200 border-b border-zinc-50 dark:border-zinc-800/50">
-                {tx.description || '—'}
+                <span>{tx.description || '—'}</span>
+                {tx.isInstallment && (
+                  <span className="ml-2 inline-flex items-center gap-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold px-1.5 py-0.5 rounded-full">
+                    Taksit
+                    {tx.currentInstallment != null && tx.totalInstallments != null && (
+                      <span className="font-mono"> {tx.currentInstallment}/{tx.totalInstallments}</span>
+                    )}
+                  </span>
+                )}
               </td>
               <td className="px-4 py-3 border-b border-zinc-50 dark:border-zinc-800/50">
                 <CategoryBadge category={tx.category} />

@@ -76,6 +76,9 @@ export const updateMonthlyBudget = (amount) =>
   client.put('/api/v1/user/monthly-budget', { monthlyBudget: amount });
 
 // ── Statement ─────────────────────────────────────────────────────────────────
+export const deleteAllStatements = () =>
+  client.delete('/api/v1/statements/all');
+
 export const uploadStatement = (file) => {
   const formData = new FormData();
   formData.append('file', file);

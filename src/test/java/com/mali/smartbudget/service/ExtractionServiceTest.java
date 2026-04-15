@@ -47,6 +47,7 @@ class ExtractionServiceTest {
     void setUp() {
         ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
         ReflectionTestUtils.setField(extractionService, "objectMapper", mapper);
+        ReflectionTestUtils.setField(extractionService, "openAiApiKey", "sk-test-real-looking-key");
 
         dummyFile = new MockMultipartFile(
                 "file", "ekstre.pdf", "application/pdf", "PDF içeriği".getBytes()
@@ -54,89 +55,24 @@ class ExtractionServiceTest {
     }
 
     // =========================================================================
-    // Mock Mode — API key geçersiz olduğunda
-    // =========================================================================
-
-    @Test
-    @DisplayName("Mock mode'da LLM çağrılmaz, sabit JSON döner")
-    void extractTransactionsAsJson_mockMode_returnsHardcodedJson() throws IOException {
-        setApiKey("your-api-key-here"); // placeholder → mock mode
-
-        String json = extractionService.extractTransactionsAsJson(dummyFile);
-
-        assertThat(json).contains("Migros Market");
-        verifyNoInteractions(chatLanguageModel);
-        verifyNoInteractions(pdfService);
-    }
-
-    @Test
-    @DisplayName("Boş API key mock mode'u tetikler")
-    void extractTransactionsAsJson_emptyApiKey_triggersMockMode() throws IOException {
-        setApiKey("");
-
-        String json = extractionService.extractTransactionsAsJson(dummyFile);
-
-        assertThat(json).isNotBlank();
-        verifyNoInteractions(chatLanguageModel);
-    }
-
-    @Test
-    @DisplayName("'sk-' ile başlamayan key mock mode'u tetikler")
-    void extractTransactionsAsJson_invalidKeyPrefix_triggersMockMode() throws IOException {
-        setApiKey("invalid-key-12345");
-
-        String json = extractionService.extractTransactionsAsJson(dummyFile);
-
-        assertThat(json).isNotBlank();
-        verifyNoInteractions(chatLanguageModel);
-    }
-
-    // =========================================================================
     // extractDtos — Happy Path
     // =========================================================================
 
     @Test
-    @DisplayName("Mock modda extractDtos doğru DTO listesi döner")
-    void extractDtos_mockMode_returnsExpectedDtos() throws IOException {
-        setApiKey("your-api-key-here");
-
-        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
-
-        assertThat(dtos).isNotEmpty();
-        assertThat(dtos.get(0).description()).isEqualTo("Migros Market");
-        assertThat(dtos.get(0).amount()).isEqualByComparingTo("245.90");
-        assertThat(dtos.get(0).category()).isEqualTo("Market");
-        assertThat(dtos.get(0).currency()).isEqualTo("TRY");
-    }
-
-    @Test
-    @DisplayName("Mock modda abonelik işaretleri doğru gelir")
-    void extractDtos_mockMode_subscriptionFlagsCorrect() throws IOException {
-        setApiKey("your-api-key-here");
-
-        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
-
-        // Mock JSON'da Netflix, Spotify, iCloud subscription=true
-        long subscriptions = dtos.stream().filter(TransactionDto::isSubscription).count();
-        assertThat(subscriptions).isGreaterThanOrEqualTo(3);
-    }
-
-    @Test
-    @DisplayName("LLM geçersiz JSON döndürdüğünde IllegalArgumentException fırlatılır")
+    @DisplayName("LLM düz metin döndürdüğünde repairJson [] üretir ve IllegalArgumentException fırlatılır")
     void extractDtos_invalidJsonFromLlm_throwsIllegalArgumentException() throws IOException {
-        setLlmMode();
+        // repairJson hiç '}' bulamayınca [] döndürür → dtos boş → "işlem bulunamadı" hatası
         when(pdfService.extractText(any())).thenReturn("PDF metin içeriği");
         doReturn("Bu JSON değil, düz metin.").when(chatLanguageModel).generate(anyString());
 
         assertThatThrownBy(() -> extractionService.extractDtos(dummyFile))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("LLM geçerli bir JSON döndürmedi");
+                .hasMessageContaining("harcama işlemi bulunamadı");
     }
 
     @Test
     @DisplayName("LLM JSON bloğu içinde döndürdüğünde (```json ... ```) temizlenir ve parse edilir")
     void extractDtos_llmReturnsJsonBlock_strippedAndParsed() throws IOException {
-        setLlmMode();
         when(pdfService.extractText(any())).thenReturn("15.04.2026 Migros Market 250,00 TL");
         doReturn("""
                 ```json
@@ -154,7 +90,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("PdfService IOException fırlattığında dış katmana yayılır")
     void extractDtos_pdfServiceThrowsIOException_propagated() throws IOException {
-        setLlmMode();
         when(pdfService.extractText(any())).thenThrow(new IOException("PDF okunamadı"));
 
         assertThatThrownBy(() -> extractionService.extractDtos(dummyFile))
@@ -169,7 +104,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Tarih dd.MM.yyyy formatında parse edilir (05.04.2026)")
     void extractDtos_dateFormat_ddmmyyyyDot_parsedCorrectly() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"05.04.2026","description":"Migros","amount":100.00,"category":"Market","currency":"TRY"}]
                 """;
@@ -185,7 +119,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Tarih dd/MM/yyyy formatında parse edilir (05/04/2026)")
     void extractDtos_dateFormat_ddmmyyyySlash_parsedCorrectly() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"05/04/2026","description":"Starbucks","amount":89.50,"category":"Kafe","currency":"TRY"}]
                 """;
@@ -201,7 +134,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Tarih yyyy/MM/dd formatında parse edilir (2026/04/05)")
     void extractDtos_dateFormat_yyyymmddSlash_parsedCorrectly() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026/04/05","description":"Shell","amount":450.00,"category":"Akaryakıt","currency":"TRY"}]
                 """;
@@ -217,7 +149,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Tarih d.M.yyyy kısa formatında parse edilir (5.4.2026)")
     void extractDtos_dateFormat_shortDot_parsedCorrectly() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"5.4.2026","description":"Carrefour","amount":320.00,"category":"Market","currency":"TRY"}]
                 """;
@@ -233,7 +164,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Tarih dd-MM-yyyy formatında parse edilir (05-04-2026)")
     void extractDtos_dateFormat_ddmmyyyyDash_parsedCorrectly() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"05-04-2026","description":"BİM","amount":178.00,"category":"Market","currency":"TRY"}]
                 """;
@@ -249,7 +179,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Desteklenen tüm tarih formatları tek JSON'da parse edilir")
     void extractDtos_allDateFormats_allRowsParsed() throws IOException {
-        setLlmMode();
         String json = """
                 [
                   {"date":"2026-04-01","description":"ISO",   "amount":10,"category":"Diğer","currency":"TRY"},
@@ -280,7 +209,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Türk formatı string tutar ('1.234,56') → 1234.56 olarak normalize edilir")
     void extractDtos_turkishAmountFormat_normalizedCorrectly() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Migros","amount":"1.234,56","category":"Market","currency":"TRY"}]
                 """;
@@ -296,7 +224,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Virgüllü ondalık string tutar ('89,50') → 89.50 olarak normalize edilir")
     void extractDtos_commaDecimalAmount_normalizedCorrectly() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Kafe","amount":"89,50","category":"Kafe","currency":"TRY"}]
                 """;
@@ -312,7 +239,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Integer tutar (245) → 245.00 olarak normalize edilir")
     void extractDtos_integerAmount_normalizedWithTwoDecimals() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"BİM","amount":245,"category":"Market","currency":"TRY"}]
                 """;
@@ -332,7 +258,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("null tarihli satır atlanır; geçerli satırlar döner")
     void extractDtos_nullDate_rowSkipped() throws IOException {
-        setLlmMode();
         String json = """
                 [
                   {"date":null,"description":"NullDate","amount":300.00,"category":"Market","currency":"TRY"},
@@ -351,7 +276,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Geçersiz tarih formatı ('April 5, 2026') → satır atlanır")
     void extractDtos_invalidDateFormat_rowSkipped() throws IOException {
-        setLlmMode();
         String json = """
                 [
                   {"date":"April 5, 2026","description":"BadDate","amount":200.00,"category":"Kira","currency":"TRY"},
@@ -370,7 +294,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("null tutarlı satır atlanır")
     void extractDtos_nullAmount_rowSkipped() throws IOException {
-        setLlmMode();
         String json = """
                 [
                   {"date":"2026-04-01","description":"NullAmount","amount":null,"category":"Market","currency":"TRY"},
@@ -389,7 +312,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Sıfır tutarlı satır atlanır (0.00 → geçersiz işlem)")
     void extractDtos_zeroAmount_rowSkipped() throws IOException {
-        setLlmMode();
         String json = """
                 [
                   {"date":"2026-04-01","description":"ZeroAmount","amount":0.00,"category":"Diğer","currency":"TRY"},
@@ -408,7 +330,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Karma JSON: 5 satır, 3'ü geçersiz → 2 geçerli satır döner")
     void extractDtos_partialFailure_onlyValidRowsReturned() throws IOException {
-        setLlmMode();
         String json = """
                 [
                   {"date":"2026-04-01","description":"Geçerli1","amount":100.00,"category":"Market","currency":"TRY"},
@@ -431,7 +352,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("Tüm satırlar geçersizse IllegalArgumentException fırlatılır")
     void extractDtos_allRowsInvalid_throwsIllegalArgumentException() throws IOException {
-        setLlmMode();
         String json = """
                 [
                   {"date":null,"description":"NullDate1","amount":100.00,"category":"Market","currency":"TRY"},
@@ -453,7 +373,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("null description → 'Bilinmeyen' varsayılanı kullanılır")
     void extractDtos_nullDescription_defaultsToBilinmeyen() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":null,"amount":100.00,"category":"Market","currency":"TRY"}]
                 """;
@@ -469,7 +388,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("null category → 'Diğer' varsayılanı kullanılır")
     void extractDtos_nullCategory_defaultsToDiger() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Test","amount":100.00,"category":null,"currency":"TRY"}]
                 """;
@@ -485,7 +403,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("null currency → 'TRY' varsayılanı kullanılır")
     void extractDtos_nullCurrency_defaultsToTRY() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Test","amount":100.00,"category":"Market","currency":null}]
                 """;
@@ -501,7 +418,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("boş string currency → 'TRY' varsayılanı kullanılır")
     void extractDtos_emptyCurrency_defaultsToTRY() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Test","amount":100.00,"category":"Market","currency":""}]
                 """;
@@ -517,7 +433,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("isSubscription string 'true' → boolean true olarak parse edilir")
     void extractDtos_isSubscriptionStringTrue_parsedAsTrue() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Netflix","amount":79.99,"category":"Eğlence","currency":"TRY","isSubscription":"true"}]
                 """;
@@ -533,7 +448,6 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("isSubscription null → false varsayılan değeri kullanılır")
     void extractDtos_isSubscriptionNull_defaultsFalse() throws IOException {
-        setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Market","amount":200.00,"category":"Market","currency":"TRY","isSubscription":null}]
                 """;
@@ -547,15 +461,176 @@ class ExtractionServiceTest {
     }
 
     // =========================================================================
-    // Yardımcılar
+    // Türk Sayı Formatı — sanitizeJson + extractDtos entegrasyon testleri
     // =========================================================================
 
-    private void setApiKey(String key) {
-        ReflectionTestUtils.setField(extractionService, "openAiApiKey", key);
+    @Test
+    @DisplayName("LLM 1.250.00 yazarsa (iki nokta) → Jackson hata vermeden 1250.00 parse edilir")
+    void extractDtos_doubleDotAmount_sanitizedAndParsed() throws IOException {
+        // Bu tam olarak bildirilen hatayı simüle eder: "amount": 1.250.00
+        String malformedJson = """
+                [{"date":"2026-04-01","description":"Migros","amount":1.250.00,"category":"Market","currency":"TRY","isSubscription":false}]
+                """;
+        when(pdfService.extractText(any())).thenReturn("metin");
+        doReturn(malformedJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).amount()).isEqualByComparingTo("1250.00");
     }
 
-    private void setLlmMode() {
-        ReflectionTestUtils.setField(extractionService, "forceMockMode", false);
-        ReflectionTestUtils.setField(extractionService, "openAiApiKey", "sk-test-real-looking-key");
+    @Test
+    @DisplayName("LLM 12.480.37 yazarsa (büyük tutar, iki nokta) → 12480.37 parse edilir")
+    void extractDtos_largeTurkishDoubleDot_sanitizedAndParsed() throws IOException {
+        String malformedJson = """
+                [{"date":"2026-04-05","description":"Kira","amount":12.480.37,"category":"Kira","currency":"TRY","isSubscription":false}]
+                """;
+        when(pdfService.extractText(any())).thenReturn("metin");
+        doReturn(malformedJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).amount()).isEqualByComparingTo("12480.37");
     }
+
+    @Test
+    @DisplayName("LLM 1.250,00 yazarsa (Türk formatı bare number) → 1250.00 parse edilir")
+    void extractDtos_turkishCommaInBareNumber_sanitizedAndParsed() throws IOException {
+        // Virgül JSON'da number içinde geçemez — sanitizer düzeltmeli
+        String malformedJson = "[{\"date\":\"2026-04-01\",\"description\":\"Shell\",\"amount\":1.250,00,\"category\":\"Akaryakıt\",\"currency\":\"TRY\",\"isSubscription\":false}]";
+        when(pdfService.extractText(any())).thenReturn("metin");
+        doReturn(malformedJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).amount()).isEqualByComparingTo("1250.00");
+    }
+
+    // =========================================================================
+    // fixAmountString — birim testleri
+    // =========================================================================
+
+    @Test
+    @DisplayName("fixAmountString: geçerli değerlere dokunmaz")
+    void fixAmountString_alreadyValid_unchanged() {
+        assertThat(extractionService.fixAmountString("1250.00")).isEqualTo("1250.00");
+        assertThat(extractionService.fixAmountString("89.90")).isEqualTo("89.90");
+        assertThat(extractionService.fixAmountString("12000")).isEqualTo("12000");
+        assertThat(extractionService.fixAmountString("5.5")).isEqualTo("5.5");
+    }
+
+    @Test
+    @DisplayName("fixAmountString: iki nokta → son nokta ondalık, öncekiler binlik")
+    void fixAmountString_multiDot_fixed() {
+        assertThat(extractionService.fixAmountString("1.250.00")).isEqualTo("1250.00");
+        assertThat(extractionService.fixAmountString("12.480.37")).isEqualTo("12480.37");
+        assertThat(extractionService.fixAmountString("1.234.567.89")).isEqualTo("1234567.89");
+    }
+
+    @Test
+    @DisplayName("fixAmountString: Türk formatı (virgül=ondalık, nokta=binlik) → standart")
+    void fixAmountString_turkishFormat_fixed() {
+        assertThat(extractionService.fixAmountString("1.250,00")).isEqualTo("1250.00");
+        assertThat(extractionService.fixAmountString("12.480,37")).isEqualTo("12480.37");
+        assertThat(extractionService.fixAmountString("89,90")).isEqualTo("89.90");
+        assertThat(extractionService.fixAmountString("49,99")).isEqualTo("49.99");
+    }
+
+    @Test
+    @DisplayName("fixAmountString: tek nokta + 3 haneli son kısım → binlik ayraç kaldırılır")
+    void fixAmountString_singleDotThreeDigits_treatedAsThousands() {
+        assertThat(extractionService.fixAmountString("1.250")).isEqualTo("1250");
+        assertThat(extractionService.fixAmountString("12.000")).isEqualTo("12000");
+    }
+
+    @Test
+    @DisplayName("sanitizeJson: karışık tutarlar içeren JSON'ı düzeltir")
+    void sanitizeJson_mixedAmounts_allFixed() {
+        String input = """
+                [
+                  {"amount":1.250.00},
+                  {"amount":12.480,37},
+                  {"amount":"89,90"},
+                  {"amount":1500.00},
+                  {"amount":49.99}
+                ]
+                """;
+        String result = extractionService.sanitizeJson(input);
+
+        assertThat(result).contains("\"amount\":1250.00");
+        assertThat(result).contains("\"amount\":12480.37");
+        assertThat(result).contains("\"amount\":89.90");
+        assertThat(result).contains("\"amount\":1500.00");
+        assertThat(result).contains("\"amount\":49.99");
+        // Tırnak karakterleri kaldırılmış olmalı
+        assertThat(result).doesNotContain("\"amount\":\"");
+    }
+
+    // =========================================================================
+    // repairJson — truncated JSON onarımı
+    // =========================================================================
+
+    @Test
+    @DisplayName("repairJson: zaten geçerli JSON'a dokunmaz")
+    void repairJson_alreadyValid_unchanged() {
+        String valid = "[{\"date\":\"2026-04-01\",\"description\":\"Migros\",\"amount\":250.00,\"category\":\"Market\",\"currency\":\"TRY\",\"isSubscription\":false}]";
+        assertThat(extractionService.repairJson(valid)).isEqualTo(valid);
+    }
+
+    @Test
+    @DisplayName("repairJson: ] eksik → son tam } sonrasına ] ekler")
+    void repairJson_missingClosingBracket_repaired() {
+        // LLM cevabı yarıda kesildi: son obje eksik
+        String truncated = "[{\"date\":\"2026-04-01\",\"amount\":250.00},{\"date\":\"2026-04-02\",\"amount\":100.00";
+        String repaired  = extractionService.repairJson(truncated);
+
+        assertThat(repaired).endsWith("]");
+        assertThat(repaired).startsWith("[");
+        // İlk tam obje kurtarılmış olmalı
+        assertThat(repaired).contains("250.00");
+        // Yarım obje atılmış olmalı
+        assertThat(repaired).doesNotContain("100.00");
+    }
+
+    @Test
+    @DisplayName("repairJson: sondaki virgül temizlenir ve ] eklenir")
+    void repairJson_trailingComma_cleaned() {
+        String truncated = "[{\"date\":\"2026-04-01\",\"amount\":250.00},";
+        String repaired  = extractionService.repairJson(truncated);
+
+        assertThat(repaired).isEqualTo("[{\"date\":\"2026-04-01\",\"amount\":250.00}]");
+    }
+
+    @Test
+    @DisplayName("repairJson: hiç tam obje yoksa [] döner")
+    void repairJson_noCompleteObject_returnsEmptyArray() {
+        assertThat(extractionService.repairJson("[{\"date\":\"2026")).isEqualTo("[]");
+        assertThat(extractionService.repairJson("")).isEqualTo("[]");
+    }
+
+    @Test
+    @DisplayName("extractDtos: truncated JSON → onarıldıktan sonra tam objeler parse edilir")
+    void extractDtos_truncatedJson_repairedAndParsed() throws IOException {
+        // İki tam obje + başlamış ama bitmemiş üçüncü obje
+        String truncated = """
+                [
+                  {"date":"2026-04-01","description":"Migros","amount":250.00,"category":"Market","currency":"TRY","isSubscription":false},
+                  {"date":"2026-04-02","description":"Starbucks","amount":89.50,"category":"Kafe","currency":"TRY","isSubscription":false},
+                  {"date":"2026-04-03","description":"Netflix","amount":49.9
+                """;
+        when(pdfService.extractText(any())).thenReturn("metin");
+        doReturn(truncated).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        // İlk iki tam obje kurtarılmış olmalı, yarım üçüncü atılmış olmalı
+        assertThat(dtos).hasSize(2);
+        assertThat(dtos.stream().map(TransactionDto::description))
+                .containsExactlyInAnyOrder("Migros", "Starbucks");
+    }
+
 }
+

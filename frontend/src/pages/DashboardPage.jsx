@@ -3,15 +3,16 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { getAnalyticsSummary, getTransactions, getBudgetAlerts, updateMonthlyBudget, clearAuth, getStoredUser } from '../api/client';
+import { getAnalyticsSummary, getTransactions, getBudgetAlerts, updateMonthlyBudget, deleteAllStatements, clearAuth, getStoredUser } from '../api/client';
 import TransactionsTable from '../components/TransactionsTable';
 import SerenaInsightCard from '../components/SerenaInsightCard';
 import CoachCard from '../components/CoachCard';
 import SubscriptionCard from '../components/SubscriptionCard';
 import BudgetGuard from '../components/BudgetGuard';
 import BudgetLimitModal from '../components/BudgetLimitModal';
+import InstallmentCard from '../components/InstallmentCard';
 import { useTheme } from '../context/ThemeContext';
-import { Sun, Moon, Upload, LogOut, ShieldAlert } from 'lucide-react';
+import { Sun, Moon, Upload, LogOut, ShieldAlert, Trash2 } from 'lucide-react';
 
 const COLORS = [
   '#6366f1', '#f43f5e', '#10b981', '#f59e0b',
@@ -73,6 +74,22 @@ export default function DashboardPage() {
     await updateMonthlyBudget(amount);
     // Refresh both summary (monthlyBudget field) and alerts (threshold recalculation)
     await Promise.all([fetchSummary(), fetchAlerts()]);
+  };
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm('Tüm işlemler ve ekstre kayıtları kalıcı olarak silinecek. Emin misiniz?')) return;
+    try {
+      await deleteAllStatements();
+      setSummary(null);
+      setTransactions([]);
+      setAlerts([]);
+      // Re-fetch to get empty state from backend
+      const [summaryRes, txRes] = await Promise.all([getAnalyticsSummary(), getTransactions()]);
+      setSummary(summaryRes.data);
+      setTransactions(txRes.data);
+    } catch {
+      // error toast handled by client interceptor
+    }
   };
 
   useEffect(() => {
@@ -176,6 +193,15 @@ export default function DashboardPage() {
           </Link>
 
           <button
+            onClick={handleDeleteAll}
+            className="flex items-center gap-1.5 text-rose-500 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 border border-rose-200 dark:border-rose-800 hover:border-rose-300 dark:hover:border-rose-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            title="Tüm verileri sil"
+          >
+            <Trash2 size={14} strokeWidth={2} />
+            <span className="hidden sm:inline">Sıfırla</span>
+          </button>
+
+          <button
             onClick={handleLogout}
             className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
           >
@@ -239,6 +265,9 @@ export default function DashboardPage() {
 
         {/* Subscription card */}
         <SubscriptionCard />
+
+        {/* Installment card — only rendered when installment transactions exist */}
+        <InstallmentCard transactions={transactions} />
 
         {/* Pie chart */}
         {pieData.length > 0 && (

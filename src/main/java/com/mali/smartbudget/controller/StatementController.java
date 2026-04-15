@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -57,5 +58,21 @@ public class StatementController {
         log.info("Yükleme tamamlandı. userId={}, sonuç='{}'", currentUser.getId(), message);
 
         return ResponseEntity.ok(message);
+    }
+
+    /**
+     * Kullanıcıya ait tüm işlem ve ekstre kayıtlarını siler.
+     *
+     * <pre>
+     * DELETE /api/v1/statements/all
+     * Authorization: Bearer &lt;jwt&gt;
+     * </pre>
+     */
+    @DeleteMapping("/all")
+    public ResponseEntity<String> deleteAll(@AuthenticationPrincipal User currentUser) {
+        log.info("Tüm veri silme isteği. userId={}, username={}",
+                currentUser.getId(), currentUser.getUsername());
+        statementService.deleteAllData(currentUser.getId());
+        return ResponseEntity.ok("Tüm veriler silindi.");
     }
 }

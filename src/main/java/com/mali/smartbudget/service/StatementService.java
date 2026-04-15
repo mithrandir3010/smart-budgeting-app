@@ -134,6 +134,9 @@ public class StatementService {
                         .category(dto.category())
                         .currency(dto.currency())
                         .isSubscription(dto.isSubscription())
+                        .isInstallment(dto.isInstallment())
+                        .currentInstallment(dto.currentInstallment())
+                        .totalInstallments(dto.totalInstallments())
                         .build())
                 .toList();
         List<Transaction> saved = transactionService.saveAllTransactions(transactions);
@@ -157,5 +160,20 @@ public class StatementService {
             msg += " (%s – %s dönemi)".formatted(periodStart.get(), periodEnd.get());
         }
         return msg + ".";
+    }
+
+    /**
+     * Kullanıcıya ait tüm işlemleri ve ekstre kayıtlarını siler.
+     *
+     * <p>Önce Transaction'lar silinir (FK bağımlılığı),
+     * ardından Statement'lar silinir.
+     *
+     * @param userId Verileri silinecek kullanıcı ID'si
+     */
+    @Transactional
+    public void deleteAllData(Long userId) {
+        transactionService.deleteAllByUserId(userId);
+        statementRepository.deleteAllByUserId(userId);
+        log.info("Tüm veriler silindi. userId={}", userId);
     }
 }

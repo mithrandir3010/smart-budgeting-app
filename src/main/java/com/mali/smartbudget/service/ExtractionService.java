@@ -7,6 +7,7 @@ import com.mali.smartbudget.dto.TransactionDto;
 import com.mali.smartbudget.util.AmountNormalizer;
 import com.mali.smartbudget.util.PdfTextCleaner;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,9 +22,11 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * PDF ekstreden işlem (Transaction) verilerini LLM aracılığıyla ayıklayan ve kaydeden servis.
+ * PDF ekstreden işlem (Transaction) verilerini LLM aracılığıyla ayıklayan servis.
  *
  * <h3>Pipeline</h3>
  * <pre>
@@ -37,12 +40,6 @@ import java.util.Map;
  *    └─ TransactionService.saveAll()   → DB
  * </pre>
  *
- * <h3>Mock Modu</h3>
- * <ul>
- *   <li>{@code serena.extraction.mock=true} → Her zaman sahte veri, LLM çağrısı yok.</li>
- *   <li>Geçersiz/eksik {@code OPENAI_API_KEY} → Otomatik mock moda geçer.</li>
- * </ul>
- *
  * <h3>Fault-Tolerant Parsing</h3>
  * LLM'den dönen JSON içindeki tek bir bozuk satır tüm süreci patlatmaz.
  * Her satır bağımsız parse edilir; başarısız satırlar loglanıp atlanır.
@@ -52,107 +49,94 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ExtractionService {
 
-    private static final String DEFAULT_API_KEY = "your-api-key-here";
+    /**
+     * Türk bankası ekstrelerine özel LLM prompt'u — kasıtlı olarak kısa tutulmuştur.
+     *
+     * <p>Uzun prompt → model JSON yerine açıklamaya odaklanır ve cevap token'ları israf edilir.
+     * Bu template sadece kuralları ve örnekleri içerir; model en kısa yoldan JSON üretir.
+     */
+    private static final String PROMPT_TEMPLATE = """
+            Turkish bank statement below. Extract spending transactions and return ONLY a JSON array.
+            No intro sentence, no explanation, no markdown fences — start with [ and end with ].
 
-    // ── Mock veri — abonelikler dahil ─────────────────────────────────────────
-    private static final String MOCK_JSON = """
-            [
-              {"date": "2026-04-01", "description": "Migros Market",       "amount": 245.90, "category": "Market",     "currency": "TRY", "isSubscription": false},
-              {"date": "2026-04-03", "description": "Starbucks",            "amount": 89.50,  "category": "Kafe",       "currency": "TRY", "isSubscription": false},
-              {"date": "2026-04-05", "description": "Kira Ödemesi",         "amount": 12000.00,"category": "Kira",      "currency": "TRY", "isSubscription": false},
-              {"date": "2026-04-07", "description": "Netflix",              "amount": 79.99,  "category": "Eğlence",   "currency": "TRY", "isSubscription": true},
-              {"date": "2026-04-08", "description": "Spotify Premium",      "amount": 49.99,  "category": "Eğlence",   "currency": "TRY", "isSubscription": true},
-              {"date": "2026-04-10", "description": "iCloud Depolama 50GB", "amount": 14.99,  "category": "Teknoloji", "currency": "TRY", "isSubscription": true}
-            ]
+            FORMAT (each object exactly like this):
+            {"date":"YYYY-MM-DD","description":"Name","amount":1234.56,"category":"Category","currency":"TRY","isSubscription":false,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
+
+            AMOUNT RULES — CRITICAL:
+            • Use ONLY dot as decimal separator. NEVER output a thousands-separator dot.
+            • 1.250,00 TL → 1250.00  |  12.480,37 TL → 12480.37  |  89,90 TL → 89.90
+            • Wrong: 1.250.00  Wrong: 1.250,00  Wrong: "1250.00"   Right: 1250.00
+
+            DATE: ISO 8601 output. 15.03.2026 or 15/03/2026 → "2026-03-15"
+
+            DESCRIPTION: Store name only. Remove POS ID, terminal, ref no, branch, city. Fix casing.
+            Keep Turkish chars (ğ ş ı ç ö ü). MKT→Market, REST→Restoran, PETROL→Akaryakıt.
+
+            CATEGORY RULES — assign exactly one, strictly follow this priority order:
+            1. Market    → Migros, BİM, A101, ŞOK, Carrefour, Hakmar, Macro, Kiler, METRO,
+                           Gıda, Manav, Kasap, Bakkal, Süpermarket, Market, Kuruyemiş, Fırın,
+                           Ekmek, Pazar, Sebze, Meyve, Aktarı, Temizlik (grocery stores only)
+            2. Kafe      → Starbucks, Gloria Jeans, Kahve Dünyası, Espresso, Cafe, Kafe, Coffee
+            3. Restoran  → Restaurant, Restoran, Burger, Pizza, Döner, Kebap, Balık, Yemek,
+                           Fast food, McDonald's, KFC, Popeyes, Subway, Noodle
+            4. Ulaşım    → İETT, Metro, Metrobüs, Otobüs, Dolmuş, Taksi, Uber, BiTaksi,
+                           Trambüs, Vapur, Marmaray, Tren, TCDD, UKOME, Toplu Taşıma
+            5. Akaryakıt → Shell, BP, Opet, Total, Petrol, Benzin, Akaryakıt, LPG
+            6. Fatura    → ISKI, IGDAS, AYEDAS, BEDAS, Elektrik, Doğalgaz, Su faturası,
+                           Turkcell, Vodafone, Türk Telekom, İnternet, Fatura
+            7. Kira      → Kira, Aidat, Site ücreti
+            8. Sağlık    → Eczane, Pharmacy, Hastane, Klinik, Doktor, Diş, Optik, Laborat
+            9. Eğlence   → Netflix, Spotify, YouTube, Disney, Sinema, Tiyatro, Konser, Oyun
+            10. Teknoloji → Apple, Samsung, Mediamarkt, Vatan, Teknosa, Arçelik, Beko,
+                            Amazon, Trendyol Elektronik, Bilgisayar, Telefon, Tablet
+            11. Giyim    → Zara, H&M, LC Waikiki, Mavi, Koton, Pull&Bear, DeFacto, Adidas,
+                           Nike, Giyim, Ayakkabı, Çanta, Tekstil
+            12. Eğitim   → Üniversite, Kurs, Kitap, Udemy, Coursera, Okul, Dershane
+            13. Sigorta  → Sigorta, Kasko, Emeklilik, BES, DASK
+            14. Diğer    → Only if none of the above match.
+            IMPORTANT: "Diğer" is a last resort. Always try to match one of the 13 named categories first.
+
+            isSubscription true: Netflix/Spotify/YouTube/AppleTV/Disney+/Amazon Prime/iCloud/
+                                  GoogleOne/Gym üyelik/Adobe/Office365/Dergi abonelik
+            isSubscription false: all other transactions
+
+            INSTALLMENT RULES — CRITICAL, NO EXCEPTIONS:
+            • A transaction is installment (isInstallment:true) if its description contains ANY of:
+              – A fraction pattern like 2/6, 3/12, 1/9, 4/24 (current/total)
+              – The word "Taksit", "TAKSİT", "TAKSIT", "taksit", "taksitli", "TAKSİTLİ"
+            • If isInstallment is true, you MUST set currentInstallment and totalInstallments.
+              NEVER leave them null when isInstallment is true.
+              – If fraction X/Y exists → currentInstallment:X, totalInstallments:Y
+              – If only "Taksit" keyword (no fraction) → currentInstallment:1, totalInstallments:1
+
+            SKIP: balance rows, IBAN, page headers/footers, VAT/fee lines, incoming transfers, refunds.
+            Extract AT MOST 60 transactions.
+
+            EXAMPLES:
+            "15.03.2026 MIGROS 1.250,00 TL"
+              → {"date":"2026-03-15","description":"Migros","amount":1250.00,"category":"Market","currency":"TRY","isSubscription":false,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
+            "01.04.2026 GIDA MARKET 340,00 TL"
+              → {"date":"2026-04-01","description":"Gıda Market","amount":340.00,"category":"Market","currency":"TRY","isSubscription":false,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
+            "01.04.2026 NETFLIX.COM 149,90 TL"
+              → {"date":"2026-04-01","description":"Netflix","amount":149.90,"category":"Eğlence","currency":"TRY","isSubscription":true,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
+            "10.04.2026 SAMSUNG TV 3/12 TAKSİT 850,50 TL"
+              → {"date":"2026-04-10","description":"Samsung TV","amount":850.50,"category":"Teknoloji","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":3,"totalInstallments":12}
+            "08.04.2026 APPLE STORE 2/6 TAKSIT 245,90 TL"
+              → {"date":"2026-04-08","description":"Apple Store","amount":245.90,"category":"Teknoloji","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":2,"totalInstallments":6}
+            "12.04.2026 TAKSİT ÖDEMESİ 500,00 TL"
+              → {"date":"2026-04-12","description":"Taksit Ödemesi","amount":500.00,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":1}
+
+            Statement:
+            %s
             """;
 
     /**
-     * Türk bankası ekstrelerine (İş Bankası, Ziraat, Garanti, Yapı Kredi vb.) özel
-     * LLM prompt'u.
+     * PDF metninden LLM'e gönderilecek maksimum karakter sayısı.
      *
-     * <p>Temel özellikler:
-     * <ul>
-     *   <li>dd.MM.yyyy tarih formatı açıkça belgelenmiş</li>
-     *   <li>1.234,56 Türk tutar formatı → LLM standart JSON number üretir</li>
-     *   <li>Türkçe karakter (ğ, ş, ı, ç, ö, ü) korunur</li>
-     *   <li>Kategori listesi sabit — LLM serbest yazmıyor</li>
-     *   <li>POS/terminal/referans gürültüsü kural olarak tanımlanmış</li>
-     * </ul>
+     * <p>~3 000 token'a karşılık gelir; geri kalan token bütçesi (4096 max_tokens) JSON çıktısına ayrılır.
+     * Daha uzun metinler bu sınırda kesilir ve log'a uyarı yazılır.
      */
-    private static final String PROMPT_TEMPLATE = """
-            Aşağıdaki Türk bankası ekstre metni (İş Bankası, Ziraat, Garanti, Yapı Kredi vb.) analiz edilecek.
-            Harcama işlemlerini JSON dizisi olarak döndür.
-
-            ÇIKTI FORMATI — kesinlikle bu yapıda, başka hiçbir metin EKLEME:
-            [
-              {
-                "date": "YYYY-MM-DD",
-                "description": "Firma Adı",
-                "amount": 1234.56,
-                "category": "Kategori",
-                "currency": "TRY",
-                "isSubscription": false
-              }
-            ]
-
-            ── TARİH KURALLARI (date) ────────────────────────────────────────────────
-            • Çıkışta HER ZAMAN YYYY-MM-DD formatı kullan (ISO 8601)
-            • Türk bankalarında giriş formatı genellikle: 15.03.2026 veya 15/03/2026
-              Bu formatları YYYY-MM-DD'ye dönüştür: 15.03.2026 → "2026-03-15"
-            • Tarih okunamazsa o satırı tamamen atla
-
-            ── TUTAR KURALLARI (amount) ──────────────────────────────────────────────
-            • Çıkışta JSON sayısı olarak yaz — string değil, tırnak işareti yok
-            • Ondalık ayırıcı NOKTA: 1234.56 ✓   Tırnaklı string: "1234.56" ✗
-            • Türk formatı (1.234,56 TL) → JSON sayısına çevir: 1234.56
-            • Binlik ayırıcı nokta/virgülü çıkışa YAZMA
-            • Her zaman POZİTİF sayı — negatif tutar kullanma
-            • İade / iade alacak / geri ödeme satırlarını ATLA
-            • Tutar okunamazsa o satırı tamamen atla
-
-            ── AÇIKLAMA KURALLARI (description) ─────────────────────────────────────
-            • Yalnızca firma/mağaza adını yaz
-            • Türkçe karakterleri KORU: ğ, ş, ı, ç, ö, ü — bunları değiştirme
-              Örnek: "ŞAŞMAZ MARKET" → "Şaşmaz Market"  ✓
-                     "TASARIM GÜZEL" → "Tasarım Güzel"  ✓
-            • Şu bilgileri YAZMA: POS ID, terminal no, saat, ref no, onay kodu,
-              slip no, merchant ID, işlem no
-            • Kısaltmaları açıkla: "MKT" → "Market", "REST" → "Restoran",
-              "PETROL" → "Akaryakıt İstasyonu", "ELK" → "Elektrik"
-            • Büyük harfi markalaştır: "MIGROS AVM CANKAYA" → "Migros"
-            • Şehir/şube/AVM bilgisini kaldır: "Carrefour Ankara" → "Carrefour"
-
-            ── KATEGORİ SEÇENEKLERİ (category) ─────────────────────────────────────
-            Yalnızca bu listeden seç — başka kelime yazma:
-            Market, Kafe, Restoran, Ulaşım, Akaryakıt, Fatura, Kira, Sağlık,
-            Eğlence, Teknoloji, Giyim, Eğitim, Sigorta, Diğer
-
-            ── isSubscription KURALLARI ──────────────────────────────────────────────
-            true  → Netflix, Spotify, YouTube Premium, Apple TV+, Disney+, Amazon Prime,
-                    iCloud, Google One, Dropbox, OneDrive, Gym üyeliği, dijital dergi,
-                    Adobe CC, Microsoft 365, antivirüs/güvenlik lisansı, IPTV aboneliği
-            false → Tek seferlik alışveriş, market, kafe, restoran, ulaşım, kira vb.
-
-            ── ATLAMA KURALLARI ──────────────────────────────────────────────────────
-            • Bakiye satırları: "Kullanılabilir Limit", "Mevcut Bakiye", "Borç Toplamı"
-            • IBAN / hesap numarası satırları
-            • Sayfa başlık ve alt bilgileri (banka adı, tarih aralığı, müşteri no)
-            • KDV / komisyon / faiz satırları (harcama değil, banka ücreti)
-            • Para yatırma / havale gelen / EFT gelen (harcama değil)
-
-            ── ÖRNEKLER (Türk bankası formatından JSON'a) ───────────────────────────
-            Ham metin: "15.03.2026  MIGROS  1.250,00 TL"
-            Çıktı: {"date":"2026-03-15","description":"Migros","amount":1250.00,"category":"Market","currency":"TRY","isSubscription":false}
-
-            Ham metin: "01.04.2026  NETFLIX.COM  149,90 TL"
-            Çıktı: {"date":"2026-04-01","description":"Netflix","amount":149.90,"category":"Eğlence","currency":"TRY","isSubscription":true}
-
-            Ham metin: "10.04.2026  SHELL AKARYAKIT  850,50 TL"
-            Çıktı: {"date":"2026-04-10","description":"Shell","amount":850.50,"category":"Akaryakıt","currency":"TRY","isSubscription":false}
-
-            Ekstre metni:
-            %s
-            """;
+    private static final int MAX_INPUT_CHARS = 12_000;
 
     // Tarih formatları (LLM bazen farklı format döner — tümünü destekle)
     private static final List<DateTimeFormatter> DATE_FORMATTERS = List.of(
@@ -164,10 +148,32 @@ public class ExtractionService {
             DateTimeFormatter.ofPattern("dd-MM-yyyy")           // 05-04-2026
     );
 
-    @Value("${serena.extraction.mock:false}")
-    private boolean forceMockMode;
+    /**
+     * "amount" alanındaki sayı değerini yakalar — hem tırnaklı string hem de
+     * bare number formlarında çalışır.
+     *
+     * <p>Sayı grubu ({@code \\d[\\d.]*(?:,\\d+)?}) kasıtlı olarak tasarlanmıştır:
+     * <ul>
+     *   <li>{@code \\d[\\d.]*} — zorunlu rakam, ardından rakam/nokta (binlik noktalara izin verir)</li>
+     *   <li>{@code (?:,\\d+)?} — isteğe bağlı {@code ,XX} son eki (Türkçe ondalık virgül)</li>
+     * </ul>
+     * Bu kombinasyon JSON ayırıcı virgülünü ({@code ,} sonrasında {@code "} veya başka karakter) yakalamazken
+     * Türk tutar virgülünü ({@code ,} sonrasında rakam) yakalar.
+     *
+     * <p>Grup referansları:
+     * <ol>
+     *   <li>key + kolon + boşluklar: {@code "amount":}</li>
+     *   <li>opsiyonel açılış tırnağı</li>
+     *   <li>ham sayı (rakam, nokta, ve opsiyonel sonunda virgül+rakam)</li>
+     *   <li>opsiyonel kapanış tırnağı</li>
+     * </ol>
+     */
+    private static final Pattern AMOUNT_JSON_PATTERN = Pattern.compile(
+            "(\"amount\"\\s*:\\s*)(\"?)(\\d[\\d.]*(?:,\\d+)?)(\"?)",
+            Pattern.CASE_INSENSITIVE
+    );
 
-    @Value("${langchain4j.open-ai.chat-model.api-key:" + DEFAULT_API_KEY + "}")
+    @Value("${langchain4j.open-ai.chat-model.api-key}")
     private String openAiApiKey;
 
     private final ChatLanguageModel chatLanguageModel;
@@ -175,23 +181,26 @@ public class ExtractionService {
     private final ObjectMapper objectMapper;
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Mock modu kontrolü
+    // Başlangıç doğrulaması
     // ─────────────────────────────────────────────────────────────────────────
 
-    private boolean isMockMode() {
-        if (forceMockMode) return true;
-        if (openAiApiKey == null || openAiApiKey.isBlank()) return true;
-        if (DEFAULT_API_KEY.equals(openAiApiKey)) return true;
-        if (!openAiApiKey.startsWith("sk-")) return true;
-        return false;
+    @PostConstruct
+    void init() {
+        if (openAiApiKey == null || openAiApiKey.isBlank() || !openAiApiKey.startsWith("sk-")) {
+            throw new IllegalStateException(
+                    "OPENAI_API_KEY geçersiz veya eksik! " +
+                    "Proje kök dizinindeki .env dosyasında OPENAI_API_KEY=sk-... tanımını kontrol edin.");
+        }
+        log.info(">>> OpenAI service is now ACTIVE with real API key: {}...",
+                openAiApiKey.substring(0, Math.min(10, openAiApiKey.length())));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // LLM / Mock JSON üretimi
+    // LLM JSON üretimi
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * PDF dosyasını okur; Mock Mode'da sahte JSON, aksi hâlde LLM yanıtı döner.
+     * PDF dosyasını okur ve LLM ile işlem JSON'ı üretir.
      *
      * <p>Pre-processing adımı burada uygulanır:
      * <ol>
@@ -201,16 +210,8 @@ public class ExtractionService {
      * </ol>
      */
     public String extractTransactionsAsJson(MultipartFile file) throws IOException {
-        boolean mock = isMockMode();
-        log.info(">>> Extraction mode: {} | forceMock={} | apiKey={}",
-                mock ? "MOCK" : "LLM", forceMockMode,
-                openAiApiKey != null && openAiApiKey.length() > 6
-                        ? openAiApiKey.substring(0, 6) + "…" : "(kısa/null)");
-
-        if (mock) {
-            log.warn("[1/4] MOCK MODE: Sahte harcamalar kullanılıyor.");
-            return MOCK_JSON;
-        }
+        log.info(">>> Extraction mode: LLM | apiKey: {}...",
+                openAiApiKey.substring(0, Math.min(10, openAiApiKey.length())));
 
         // Adım A — PDF'ten ham metin
         String rawText = pdfService.extractText(file);
@@ -239,8 +240,16 @@ public class ExtractionService {
         log.debug("[1/4] Temiz metin (ilk 600 karakter):\n{}",
                 cleanText.substring(0, Math.min(600, cleanText.length())));
 
-        // Adım C — LLM
-        String prompt = String.format(PROMPT_TEMPLATE, cleanText);
+        // Adım C — Chunking: metin çok uzunsa keserek token bütçesini koru
+        String inputText = cleanText;
+        if (inputText.length() > MAX_INPUT_CHARS) {
+            log.warn("[1/4] Metin {} karakter — {} karaktere kırpılıyor (max_tokens bütçesi korunur).",
+                    inputText.length(), MAX_INPUT_CHARS);
+            inputText = inputText.substring(0, MAX_INPUT_CHARS);
+        }
+
+        // Adım D — LLM
+        String prompt = String.format(PROMPT_TEMPLATE, inputText);
         log.info("[2/4] LLM isteği gönderiliyor... (~{} tahmini token)",
                 prompt.length() / 4);
 
@@ -272,16 +281,35 @@ public class ExtractionService {
     public List<TransactionDto> extractDtos(MultipartFile file) throws IOException {
 
         log.info("[2/4] JSON ayıklama başlıyor...");
-        String json = extractTransactionsAsJson(file);
+        String rawLlmJson = extractTransactionsAsJson(file);
 
         // LLM bazen ```json ... ``` bloğu içinde döner — temizle
-        String cleanJson = stripMarkdownFences(json);
-        log.info("[2/4] JSON temizlendi. İlk 120 karakter: {}",
-                cleanJson.substring(0, Math.min(120, cleanJson.length())));
+        String fencedStripped = stripMarkdownFences(rawLlmJson);
+
+        // Türk sayı formatı düzeltici: 1.250.00 → 1250.00, 1.250,00 → 1250.00
+        // Bu adım Jackson'a geçmeden önce malformed JSON number'ları onarır.
+        String sanitized = sanitizeJson(fencedStripped);
+
+        // JSON onarıcı: LLM cevabı max_tokens'ta yarıda kesilebilir.
+        // Eksik kapanış parantezlerini tamamlayarak kurtarılabilir kayıtları korur.
+        String cleanJson = repairJson(sanitized);
+        log.info("[2/4] JSON hazır. İlk 200 karakter: {}",
+                cleanJson.substring(0, Math.min(200, cleanJson.length())));
 
         // Fault-tolerant parse: her satır bağımsız, biri bozuk olsa diğerleri kurtarılır
         log.info("[3/4] Fault-tolerant JSON parse başlıyor...");
-        List<TransactionDto> dtos = parseRowsFaultTolerant(cleanJson);
+        List<TransactionDto> dtos;
+        try {
+            dtos = parseRowsFaultTolerant(cleanJson);
+        } catch (Exception e) {
+            // Parse tamamen başarısız — LLM'in ham çıktısını logla
+            log.error("[3/4] JSON parse tamamen başarısız!\n" +
+                      "── LLM ham yanıt ({} karakter) ──────────────────\n{}\n" +
+                      "── Sanitize sonrası ({} karakter) ───────────────\n{}",
+                    rawLlmJson.length(), rawLlmJson,
+                    cleanJson.length(), cleanJson);
+            throw e;
+        }
         log.info("[3/4] Parse tamamlandı. {} geçerli DTO.", dtos.size());
 
         if (dtos.isEmpty()) {
@@ -399,7 +427,35 @@ public class ExtractionService {
             isSubscription = Boolean.parseBoolean(subRaw.toString());
         }
 
-        return new TransactionDto(date, description, amount, category, currency, isSubscription);
+        // ── Taksit alanları ───────────────────────────────────────────────────
+        boolean isInstallment = false;
+        Object instRaw = row.get("isInstallment");
+        if (instRaw instanceof Boolean b) {
+            isInstallment = b;
+        } else if (instRaw != null) {
+            isInstallment = Boolean.parseBoolean(instRaw.toString());
+        }
+
+        Integer currentInstallment = null;
+        Object curRaw = row.get("currentInstallment");
+        if (curRaw instanceof Number n) {
+            currentInstallment = n.intValue();
+        } else if (curRaw != null && !curRaw.toString().equalsIgnoreCase("null")) {
+            try { currentInstallment = Integer.parseInt(curRaw.toString().trim()); }
+            catch (NumberFormatException ignored) {}
+        }
+
+        Integer totalInstallments = null;
+        Object totRaw = row.get("totalInstallments");
+        if (totRaw instanceof Number n) {
+            totalInstallments = n.intValue();
+        } else if (totRaw != null && !totRaw.toString().equalsIgnoreCase("null")) {
+            try { totalInstallments = Integer.parseInt(totRaw.toString().trim()); }
+            catch (NumberFormatException ignored) {}
+        }
+
+        return new TransactionDto(date, description, amount, category, currency,
+                isSubscription, isInstallment, currentInstallment, totalInstallments);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -430,5 +486,157 @@ public class ExtractionService {
                 .replaceAll("(?s)^```\\s*",    "")
                 .replaceAll("```$",            "")
                 .trim();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // JSON Onarıcı — truncated cevapları kurtarır
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * max_tokens sınırına takılan (yarıda kesilen) LLM yanıtını onarmaya çalışır.
+     *
+     * <p>Strateji: JSON dizisinin son tam {@code }} karakterine kadar olan kısmı alır,
+     * sondaki fazladan virgülü temizler ve {@code ]} ekleyerek kapatır.
+     * Böylece yarım kalan son obje atılır ama geri kalan tüm işlemler kurtarılır.
+     *
+     * <p>Örnekler:
+     * <pre>
+     *  Gelen:   [{...},{...},{"date":"2026
+     *  Onarıldı: [{...},{...}]        (son yarım obje atıldı)
+     *
+     *  Gelen:   [{...},{...},
+     *  Onarıldı: [{...},{...}]        (sondaki virgül temizlendi)
+     *
+     *  Gelen:   [{...},{...}]
+     *  Onarıldı: [{...},{...}]        (zaten geçerli — dokunulmadı)
+     * </pre>
+     *
+     * @param json markdown çitleri ve sayı sanitasyonu uygulanmış JSON string'i
+     * @return geçerli (veya daha geçerli) JSON string'i
+     */
+    String repairJson(String json) {
+        String s = json.trim();
+
+        // Zaten geçerli bir dizi kapanışıyla bitiyor → dokunma
+        if (s.endsWith("]")) return s;
+
+        log.warn("[repair] JSON ] ile bitmiyor — onarım deneniyor. Son 80 karakter: ...{}",
+                s.substring(Math.max(0, s.length() - 80)));
+
+        // Son tam '}' konumunu bul
+        int lastBrace = s.lastIndexOf('}');
+        if (lastBrace < 0) {
+            // Hiç tam obje yok — boş dizi dön
+            log.warn("[repair] Hiç tam JSON objesi bulunamadı — [] döndürülüyor.");
+            return "[]";
+        }
+
+        // Son '}' sonrasını kes
+        String truncated = s.substring(0, lastBrace + 1).stripTrailing();
+
+        // Sondaki virgülü temizle: [{...},{...},  →  [{...},{...}
+        if (truncated.endsWith(",")) {
+            truncated = truncated.substring(0, truncated.length() - 1).stripTrailing();
+        }
+
+        // Açılış '[' yoksa ekle
+        if (!truncated.startsWith("[")) {
+            truncated = "[" + truncated;
+        }
+
+        String repaired = truncated + "]";
+        log.warn("[repair] Onarım tamamlandı. Orijinal: {} karakter → Onarıldı: {} karakter.",
+                json.length(), repaired.length());
+        return repaired;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // JSON Sayı Sanitizer — Türk banka formatı düzeltici
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * LLM'den gelen JSON string'indeki malformed {@code "amount"} değerlerini
+     * Jackson'a vermeden önce düzeltir.
+     *
+     * <p>Düzeltilen durumlar:
+     * <ul>
+     *   <li>{@code "amount": 1.250.00}  → {@code "amount": 1250.00}  (iki nokta)</li>
+     *   <li>{@code "amount": 1.250,00}  → {@code "amount": 1250.00}  (Türk formatı)</li>
+     *   <li>{@code "amount": "1.250,00"} → {@code "amount": 1250.00} (string → number)</li>
+     *   <li>{@code "amount": 12.480,37} → {@code "amount": 12480.37} (binlik nokta)</li>
+     * </ul>
+     *
+     * @param json LLM'den gelen, markdown çitleri temizlenmiş JSON string'i
+     * @return amount değerleri düzeltilmiş JSON string'i
+     */
+    String sanitizeJson(String json) {
+        StringBuffer sb = new StringBuffer();
+        Matcher m = AMOUNT_JSON_PATTERN.matcher(json);
+        int fixCount = 0;
+
+        while (m.find()) {
+            String keyPart = m.group(1);  // "amount":
+            String rawNum  = m.group(3);  // ham sayı
+            String fixed   = fixAmountString(rawNum);
+
+            if (!fixed.equals(rawNum)) {
+                log.debug("[sanitize] amount düzeltildi: '{}' → '{}'", rawNum, fixed);
+                fixCount++;
+            }
+            // Tırnak karakterlerini (grup 2,4) bilerek atıyoruz: sonuç her zaman JSON number
+            m.appendReplacement(sb, Matcher.quoteReplacement(keyPart + fixed));
+        }
+        m.appendTail(sb);
+
+        if (fixCount > 0) {
+            log.info("[sanitize] {} adet amount değeri düzeltildi.", fixCount);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Ham sayı string'ini geçerli JSON number formatına (ondalık nokta) çevirir.
+     *
+     * <p>Kural seti:
+     * <ol>
+     *   <li>Zaten geçerliyse ({@code \d+(\.\d{1,2})?}) değiştirme</li>
+     *   <li>Virgül içeriyorsa → Türk formatı: nokta=binlik, virgül=ondalık</li>
+     *   <li>Birden fazla nokta → son nokta ondalık, diğerleri binlik</li>
+     *   <li>Tek nokta, sonrasında tam 3 rakam → binlik nokta (1.250 → 1250)</li>
+     * </ol>
+     */
+    String fixAmountString(String raw) {
+        raw = raw.trim();
+        if (raw.isEmpty()) return raw;
+
+        // ── 1. Zaten geçerli JSON number ─────────────────────────────────────
+        if (raw.matches("\\d+(\\.\\d{1,2})?")) return raw;
+
+        // ── 2. Virgül var → Türk/Avrupa formatı (nokta=binlik, virgül=ondalık)
+        //      Örnekler: 1.250,00 → 1250.00 | 12.480,37 → 12480.37 | 89,90 → 89.90
+        if (raw.contains(",")) {
+            return raw.replace(".", "").replace(",", ".");
+        }
+
+        // ── 3. Birden fazla nokta → son nokta ondalık, öncekiler binlik
+        //      Örnek: 1.250.00 → 1250.00 | 12.480.37 → 12480.37
+        long dotCount = raw.chars().filter(c -> c == '.').count();
+        if (dotCount > 1) {
+            int lastDot  = raw.lastIndexOf('.');
+            String intPart = raw.substring(0, lastDot).replace(".", "");
+            String decPart = raw.substring(lastDot + 1);
+            return intPart + "." + decPart;
+        }
+
+        // ── 4. Tek nokta: 3 haneli son kısım → binlik ayraç (1.250 → 1250)
+        if (raw.contains(".")) {
+            int dot = raw.indexOf('.');
+            String afterDot = raw.substring(dot + 1);
+            if (afterDot.length() == 3 && afterDot.matches("\\d+")) {
+                return raw.replace(".", "");
+            }
+        }
+
+        return raw;
     }
 }

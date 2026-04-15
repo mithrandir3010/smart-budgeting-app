@@ -44,4 +44,11 @@ public class Transaction {
 
     @Column(nullable = false, columnDefinition = "boolean DEFAULT false")
     private boolean isSubscription;
+
+    @Column(nullable = false, columnDefinition = "boolean DEFAULT false")
+    private boolean isInstallment;
+
+    private Integer currentInstallment;
+
+    private Integer totalInstallments;
 }

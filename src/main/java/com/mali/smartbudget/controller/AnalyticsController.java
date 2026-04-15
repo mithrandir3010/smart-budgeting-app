@@ -35,7 +35,7 @@ public class AnalyticsController {
         log.info("İşlem listesi isteği alındı. userId={}", currentUser.getId());
         List<TransactionDto> dtos = transactionService.getTransactionsByUser(currentUser.getId())
                 .stream()
-                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency(), t.isSubscription()))
+                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency(), t.isSubscription(), t.isInstallment(), t.getCurrentInstallment(), t.getTotalInstallments()))
                 .toList();
         return ResponseEntity.ok(dtos);
     }
@@ -45,7 +45,7 @@ public class AnalyticsController {
         log.info("Abonelik listesi isteği alındı. userId={}", currentUser.getId());
         List<TransactionDto> dtos = transactionService.getSubscriptionsByUser(currentUser.getId())
                 .stream()
-                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency(), t.isSubscription()))
+                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency(), t.isSubscription(), t.isInstallment(), t.getCurrentInstallment(), t.getTotalInstallments()))
                 .toList();
         return ResponseEntity.ok(dtos);
     }

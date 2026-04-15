@@ -3,6 +3,7 @@ package com.mali.smartbudget.repository;
 import com.mali.smartbudget.model.Statement;
 import com.mali.smartbudget.model.StatementStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -14,6 +15,10 @@ import java.util.List;
 public interface StatementRepository extends JpaRepository<Statement, Long> {
 
     List<Statement> findByUserId(Long userId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Statement s WHERE s.user.id = :userId")
+    void deleteAllByUserId(@Param("userId") Long userId);
 
     List<Statement> findByUserIdAndStatus(Long userId, StatementStatus status);
 
