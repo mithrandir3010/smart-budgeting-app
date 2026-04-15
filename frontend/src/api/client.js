@@ -71,6 +71,10 @@ export const deleteBudgetLimit = (id) =>
 export const getBudgetAlerts = () =>
   client.get('/api/v1/budget-limits/alerts');
 
+// ── User Profile ──────────────────────────────────────────────────────────────
+export const updateMonthlyBudget = (amount) =>
+  client.put('/api/v1/user/monthly-budget', { monthlyBudget: amount });
+
 // ── Statement ─────────────────────────────────────────────────────────────────
 export const uploadStatement = (file) => {
   const formData = new FormData();

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { getAnalyticsSummary, getTransactions, getBudgetAlerts, clearAuth, getStoredUser } from '../api/client';
+import { getAnalyticsSummary, getTransactions, getBudgetAlerts, updateMonthlyBudget, clearAuth, getStoredUser } from '../api/client';
 import TransactionsTable from '../components/TransactionsTable';
 import SerenaInsightCard from '../components/SerenaInsightCard';
 import CoachCard from '../components/CoachCard';
@@ -57,6 +57,21 @@ export default function DashboardPage() {
     } catch {
       // Alerts are non-critical; silently ignore failures
     }
+  };
+
+  const fetchSummary = async () => {
+    try {
+      const res = await getAnalyticsSummary();
+      setSummary(res.data);
+    } catch {
+      // Summary reload errors are non-critical (data still visible)
+    }
+  };
+
+  const handleBudgetSet = async (amount) => {
+    await updateMonthlyBudget(amount);
+    // Refresh both summary (monthlyBudget field) and alerts (threshold recalculation)
+    await Promise.all([fetchSummary(), fetchAlerts()]);
   };
 
   useEffect(() => {
@@ -210,7 +225,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Coach card */}
-        <CoachCard summary={summary} />
+        <CoachCard summary={summary} onBudgetSet={handleBudgetSet} />
 
         {/* Subscription card */}
         <SubscriptionCard />

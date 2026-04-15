@@ -1,19 +1,25 @@
 /**
  * CoachCard
- * Harcama verilerini görselleştirir — progress bar, tahmin, günlük hız.
- * Veri: /api/v1/analytics/summary (AnalyticsService)
+ *
+ * Kullanıcının monthlyBudget değerine göre iki mod:
+ *  1. Bütçe yok  → "Bütçe Hedefi Belirle" prompt kartı
+ *  2. Bütçe var  → Harcama hızı + projeksiyon + progress bar
  */
 
-import { TrendingUp, Zap, BarChart2 } from 'lucide-react';
+import { useState } from 'react';
+import { TrendingUp, Zap, BarChart2, Target, Loader2 } from 'lucide-react';
 
 function fmt(n) {
   return Number(n).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
 }
 
+// ── Progress Bar ──────────────────────────────────────────────────────────────
+
 function ProgressBar({ current, projected, budget }) {
-  const budgetNum    = Number(budget)    || 10000;
+  const budgetNum    = Number(budget)    || 0;
   const currentNum   = Number(current)   || 0;
   const projectedNum = Number(projected) || 0;
+  if (budgetNum === 0) return null;
 
   const max      = budgetNum * 1.5;
   const curPct   = Math.min((currentNum   / max) * 100, 100);
@@ -24,15 +30,10 @@ function ProgressBar({ current, projected, budget }) {
   return (
     <div className="mb-4">
       <div className="relative h-2.5 bg-zinc-200 dark:bg-zinc-700 rounded-full mb-2.5">
-        {/* Gerçekleşen */}
         <div
           className="absolute left-0 top-0 h-full rounded-full transition-all duration-500"
-          style={{
-            width: `${curPct}%`,
-            background: isOverBudget ? '#f43f5e' : '#6366f1',
-          }}
+          style={{ width: `${curPct}%`, background: isOverBudget ? '#f43f5e' : '#6366f1' }}
         />
-        {/* Tahmini ek — çizgili desen */}
         {projPct > curPct && (
           <div
             className="absolute top-0 h-full rounded-r-full"
@@ -45,7 +46,6 @@ function ProgressBar({ current, projected, budget }) {
             }}
           />
         )}
-        {/* Limit çizgisi */}
         <div
           className="absolute top-[-5px] w-0.5 h-5 bg-zinc-500 dark:bg-zinc-400 rounded-sm"
           style={{ left: `${limitPct}%` }}
@@ -66,16 +66,107 @@ function ProgressBar({ current, projected, budget }) {
   );
 }
 
-export default function CoachCard({ summary }) {
-  if (!summary || Number(summary.totalSpending) === 0) return null;
+// ── Bütçe Belirleme Prompt Kartı ──────────────────────────────────────────────
+
+function BudgetPromptCard({ hasData, onBudgetSet }) {
+  const [input, setInput]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState('');
+
+  const handleSave = async () => {
+    const amount = parseFloat(input);
+    if (!input || isNaN(amount) || amount <= 0) {
+      setError('Geçerli bir tutar girin (örn: 10000).');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await onBudgetSet(amount);
+    } catch {
+      setError('Kaydedilemedi, lütfen tekrar deneyin.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-dashed border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/20 p-5">
+      <div className="flex items-start gap-3 mb-4">
+        <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex-shrink-0">
+          <Target size={20} className="text-indigo-500" strokeWidth={2} />
+        </div>
+        <div>
+          <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
+            Bütçe Hedefi Belirle
+          </p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
+            {hasData
+              ? 'Aylık harcama limitini belirleyerek Serena\'nın seni korumasını sağlayabilirsin.'
+              : 'Henüz ekstre yüklemeden de limitini belirleyebilirsin — Serena veriler gelince seni izlemeye başlar.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-400 font-medium">₺</span>
+          <input
+            type="number"
+            min="1"
+            step="100"
+            placeholder="Örn: 10000"
+            value={input}
+            onChange={(e) => { setError(''); setInput(e.target.value); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+            className="w-full pl-7 pr-3 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition placeholder:text-zinc-400"
+          />
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving || !input}
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors flex-shrink-0"
+        >
+          {saving
+            ? <Loader2 size={14} className="animate-spin" />
+            : 'Kaydet'
+          }
+        </button>
+      </div>
+
+      {error && (
+        <p className="text-xs text-rose-500 font-medium mt-2">{error}</p>
+      )}
+
+      <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-3 italic">
+        İstediğin zaman "Limitler" menüsünden değiştirebilirsin.
+      </p>
+    </div>
+  );
+}
+
+// ── Ana Bileşen ───────────────────────────────────────────────────────────────
+
+export default function CoachCard({ summary, onBudgetSet }) {
+  if (!summary) return null;
+
+  const hasData   = Number(summary.totalSpending) > 0;
+  const hasBudget = summary.monthlyBudget != null;
+
+  // Bütçe hedefi belirlenmemiş → prompt göster
+  if (!hasBudget) {
+    return <BudgetPromptCard hasData={hasData} onBudgetSet={onBudgetSet} />;
+  }
+
+  // Bütçe var ama henüz veri yok → render etme
+  if (!hasData) return null;
 
   const { projectedSpending, dailyRate, monthlyBudget, totalSpending } = summary;
   const projected    = Number(projectedSpending) || 0;
-  const budget       = Number(monthlyBudget)      || 10000;
+  const budget       = Number(monthlyBudget)     || 0;
   const isOverBudget = projected > budget;
-
-  const diff    = Math.abs(projected - budget);
-  const diffPct = budget ? ((diff / budget) * 100).toFixed(0) : 0;
+  const diff         = Math.abs(projected - budget);
+  const diffPct      = budget ? ((diff / budget) * 100).toFixed(0) : 0;
 
   return (
     <div className={`rounded-xl border-l-4 p-5 shadow-sm transition-colors ${
@@ -87,9 +178,7 @@ export default function CoachCard({ summary }) {
       {/* Başlık */}
       <div className="flex items-center gap-3 mb-4">
         <div className={`flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0 ${
-          isOverBudget
-            ? 'bg-rose-100 dark:bg-rose-900/40'
-            : 'bg-emerald-100 dark:bg-emerald-900/40'
+          isOverBudget ? 'bg-rose-100 dark:bg-rose-900/40' : 'bg-emerald-100 dark:bg-emerald-900/40'
         }`}>
           <BarChart2
             size={20}
@@ -134,9 +223,7 @@ export default function CoachCard({ summary }) {
         />
         <span className="text-sm text-zinc-500 dark:text-zinc-400">Ay sonu tahmini:</span>
         <span className={`text-lg font-bold tracking-tight ${
-          isOverBudget
-            ? 'text-rose-500'
-            : 'text-emerald-700 dark:text-emerald-400'
+          isOverBudget ? 'text-rose-500' : 'text-emerald-700 dark:text-emerald-400'
         }`}>
           {fmt(projected)}
         </span>

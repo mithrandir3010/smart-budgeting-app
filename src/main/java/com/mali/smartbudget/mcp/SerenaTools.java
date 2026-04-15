@@ -113,18 +113,25 @@ public class SerenaTools {
         StringBuilder sb = new StringBuilder();
         sb.append("## Serena Bütçe Özeti\n\n");
         sb.append("- **Toplam Harcama**: ").append(formatTRY(s.totalSpending())).append("\n");
-        sb.append("- **Aylık Limit**: ").append(formatTRY(s.monthlyBudget())).append("\n");
         sb.append("- **Günlük Harcama Hızı**: ").append(formatTRY(s.dailyRate())).append("/gün\n");
         sb.append("- **Ay Sonu Tahmini**: ").append(formatTRY(s.projectedSpending())).append("\n");
 
-        BigDecimal remaining = s.monthlyBudget().subtract(s.totalSpending());
-        sb.append("- **Kalan Limit**: ").append(formatTRY(remaining)).append("\n");
+        if (s.monthlyBudget() != null) {
+            sb.append("- **Aylık Limit**: ").append(formatTRY(s.monthlyBudget())).append("\n");
 
-        double usedPct = s.totalSpending()
-                .divide(s.monthlyBudget(), 4, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100))
-                .doubleValue();
-        sb.append("- **Limit Kullanımı**: %%.0f%%\n".formatted(usedPct));
+            BigDecimal remaining = s.monthlyBudget().subtract(s.totalSpending());
+            sb.append("- **Kalan Limit**: ").append(formatTRY(remaining)).append("\n");
+
+            if (s.monthlyBudget().compareTo(BigDecimal.ZERO) > 0) {
+                double usedPct = s.totalSpending()
+                        .divide(s.monthlyBudget(), 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100))
+                        .doubleValue();
+                sb.append("- **Limit Kullanımı**: %.0f%%\n".formatted(usedPct));
+            }
+        } else {
+            sb.append("- **Aylık Limit**: Belirlenmemiş (Dashboard'dan ayarlayabilirsin)\n");
+        }
 
         if (s.warning() != null) {
             sb.append("\n⚠️ **UYARI**: ").append(s.warning()).append("\n");
