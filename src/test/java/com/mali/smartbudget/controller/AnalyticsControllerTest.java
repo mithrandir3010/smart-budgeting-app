@@ -217,7 +217,8 @@ class AnalyticsControllerTest {
                 total.multiply(new BigDecimal("3")),
                 total.compareTo(BigDecimal.ZERO) == 0
                         ? BigDecimal.ZERO
-                        : total.divide(new BigDecimal("10"), 2, RoundingMode.HALF_UP)
+                        : total.divide(new BigDecimal("10"), 2, RoundingMode.HALF_UP),
+                List.of()
         );
     }
 
