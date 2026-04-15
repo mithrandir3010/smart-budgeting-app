@@ -234,7 +234,7 @@ class AnalyticsServiceTest {
         );
         assertThat(advice).contains("harcadın");
         assertThat(advice).contains("Market");
-        assertThat(advice).contains("Serena");
+        assertThat(advice).contains("bütçe hedefi");
     }
 
     @Test

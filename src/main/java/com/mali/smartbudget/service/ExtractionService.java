@@ -4,18 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mali.smartbudget.dto.TransactionDto;
-import com.mali.smartbudget.model.Transaction;
-import com.mali.smartbudget.model.User;
-import com.mali.smartbudget.repository.UserRepository;
 import com.mali.smartbudget.util.AmountNormalizer;
 import com.mali.smartbudget.util.PdfTextCleaner;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -72,64 +67,88 @@ public class ExtractionService {
             """;
 
     /**
-     * İyileştirilmiş LLM prompt'u.
+     * Türk bankası ekstrelerine (İş Bankası, Ziraat, Garanti, Yapı Kredi vb.) özel
+     * LLM prompt'u.
      *
-     * <p>Temel geliştirmeler (önceki sürüme göre):
+     * <p>Temel özellikler:
      * <ul>
-     *   <li>Açıklama kuralları: POS ID / terminal no / saat / ref kodu yazılmaz</li>
-     *   <li>Tutar kuralları: nokta ondalık, virgül kullanılmaz, negatif yok</li>
-     *   <li>Kategori listesi sabit tutuldu — LLM serbest yazmıyor</li>
-     *   <li>Hata yönetimi: tarih/tutar okunamazsa satır atlanır</li>
-     *   <li>isSubscription kuralları genişletildi</li>
+     *   <li>dd.MM.yyyy tarih formatı açıkça belgelenmiş</li>
+     *   <li>1.234,56 Türk tutar formatı → LLM standart JSON number üretir</li>
+     *   <li>Türkçe karakter (ğ, ş, ı, ç, ö, ü) korunur</li>
+     *   <li>Kategori listesi sabit — LLM serbest yazmıyor</li>
+     *   <li>POS/terminal/referans gürültüsü kural olarak tanımlanmış</li>
      * </ul>
      */
     private static final String PROMPT_TEMPLATE = """
-            Aşağıdaki banka ekstresi metnini analiz et ve harcama işlemlerini JSON olarak döndür.
+            Aşağıdaki Türk bankası ekstre metni (İş Bankası, Ziraat, Garanti, Yapı Kredi vb.) analiz edilecek.
+            Harcama işlemlerini JSON dizisi olarak döndür.
 
-            ÇIKTI FORMATI — kesinlikle bu yapıda, başka hiçbir metin ekleme:
+            ÇIKTI FORMATI — kesinlikle bu yapıda, başka hiçbir metin EKLEME:
             [
               {
                 "date": "YYYY-MM-DD",
                 "description": "Firma Adı",
-                "amount": 123.45,
+                "amount": 1234.56,
                 "category": "Kategori",
                 "currency": "TRY",
                 "isSubscription": false
               }
             ]
 
-            ── AÇIKLAMA KURALLARI (description) ─────────────────────────────────────
-            • Yalnızca firma/mağaza adını yaz. Örnek: "Migros", "Netflix", "Shell"
-            • Şu bilgileri YAZMA: POS ID, terminal numarası, saat, referans no,
-              onay kodu, işlem no, slip no, merchant ID
-            • Kısaltmaları açıkla: "MKT" → "Market", "REST" → "Restoran"
-            • Büyük harfi markalaştır: "STARBUCKS ANKARA AVM" → "Starbucks"
-            • Şehir/şube bilgisini kaldır: "Migros Çankaya" → "Migros"
+            ── TARİH KURALLARI (date) ────────────────────────────────────────────────
+            • Çıkışta HER ZAMAN YYYY-MM-DD formatı kullan (ISO 8601)
+            • Türk bankalarında giriş formatı genellikle: 15.03.2026 veya 15/03/2026
+              Bu formatları YYYY-MM-DD'ye dönüştür: 15.03.2026 → "2026-03-15"
+            • Tarih okunamazsa o satırı tamamen atla
 
             ── TUTAR KURALLARI (amount) ──────────────────────────────────────────────
-            • Her zaman pozitif sayı yaz — negatif tutar kullanma
-            • Ondalık ayırıcı NOKTA (.) kullan: 1234.56 ✓ | 1.234,56 ✗
-            • Binlik ayırıcı olarak virgül veya nokta YAZMA: 1234.56 ✓ | 1,234.56 ✗
-            • İade / geri ödeme / kredi işlemlerini atla (negatif satırlar)
+            • Çıkışta JSON sayısı olarak yaz — string değil, tırnak işareti yok
+            • Ondalık ayırıcı NOKTA: 1234.56 ✓   Tırnaklı string: "1234.56" ✗
+            • Türk formatı (1.234,56 TL) → JSON sayısına çevir: 1234.56
+            • Binlik ayırıcı nokta/virgülü çıkışa YAZMA
+            • Her zaman POZİTİF sayı — negatif tutar kullanma
+            • İade / iade alacak / geri ödeme satırlarını ATLA
+            • Tutar okunamazsa o satırı tamamen atla
 
-            ── TARİH KURALLARI (date) ────────────────────────────────────────────────
-            • Her zaman YYYY-MM-DD formatında yaz
+            ── AÇIKLAMA KURALLARI (description) ─────────────────────────────────────
+            • Yalnızca firma/mağaza adını yaz
+            • Türkçe karakterleri KORU: ğ, ş, ı, ç, ö, ü — bunları değiştirme
+              Örnek: "ŞAŞMAZ MARKET" → "Şaşmaz Market"  ✓
+                     "TASARIM GÜZEL" → "Tasarım Güzel"  ✓
+            • Şu bilgileri YAZMA: POS ID, terminal no, saat, ref no, onay kodu,
+              slip no, merchant ID, işlem no
+            • Kısaltmaları açıkla: "MKT" → "Market", "REST" → "Restoran",
+              "PETROL" → "Akaryakıt İstasyonu", "ELK" → "Elektrik"
+            • Büyük harfi markalaştır: "MIGROS AVM CANKAYA" → "Migros"
+            • Şehir/şube/AVM bilgisini kaldır: "Carrefour Ankara" → "Carrefour"
 
-            ── KATEGORİ SEÇENEKLERI (category) ─────────────────────────────────────
-            Yalnızca bu listeden seç:
+            ── KATEGORİ SEÇENEKLERİ (category) ─────────────────────────────────────
+            Yalnızca bu listeden seç — başka kelime yazma:
             Market, Kafe, Restoran, Ulaşım, Akaryakıt, Fatura, Kira, Sağlık,
             Eğlence, Teknoloji, Giyim, Eğitim, Sigorta, Diğer
 
             ── isSubscription KURALLARI ──────────────────────────────────────────────
             true  → Netflix, Spotify, YouTube Premium, Apple TV+, Disney+, Amazon Prime,
-                    iCloud, Google One, Dropbox, OneDrive, Gym üyeliği, dijital dergi/gazete,
-                    Adobe Creative Cloud, Microsoft 365, antivirüs/güvenlik yazılımı lisansı
+                    iCloud, Google One, Dropbox, OneDrive, Gym üyeliği, dijital dergi,
+                    Adobe CC, Microsoft 365, antivirüs/güvenlik lisansı, IPTV aboneliği
             false → Tek seferlik alışveriş, market, kafe, restoran, ulaşım, kira vb.
 
-            ── HATA YÖNETİMİ ────────────────────────────────────────────────────────
-            • Tarih veya tutar okunamazsa o satırı tamamen atla
-            • Bakiye, limit, IBAN, hesap özeti gibi ekstre meta verilerini atla
-            • Sayfa başlıkları ve alt bilgileri atla
+            ── ATLAMA KURALLARI ──────────────────────────────────────────────────────
+            • Bakiye satırları: "Kullanılabilir Limit", "Mevcut Bakiye", "Borç Toplamı"
+            • IBAN / hesap numarası satırları
+            • Sayfa başlık ve alt bilgileri (banka adı, tarih aralığı, müşteri no)
+            • KDV / komisyon / faiz satırları (harcama değil, banka ücreti)
+            • Para yatırma / havale gelen / EFT gelen (harcama değil)
+
+            ── ÖRNEKLER (Türk bankası formatından JSON'a) ───────────────────────────
+            Ham metin: "15.03.2026  MIGROS  1.250,00 TL"
+            Çıktı: {"date":"2026-03-15","description":"Migros","amount":1250.00,"category":"Market","currency":"TRY","isSubscription":false}
+
+            Ham metin: "01.04.2026  NETFLIX.COM  149,90 TL"
+            Çıktı: {"date":"2026-04-01","description":"Netflix","amount":149.90,"category":"Eğlence","currency":"TRY","isSubscription":true}
+
+            Ham metin: "10.04.2026  SHELL AKARYAKIT  850,50 TL"
+            Çıktı: {"date":"2026-04-10","description":"Shell","amount":850.50,"category":"Akaryakıt","currency":"TRY","isSubscription":false}
 
             Ekstre metni:
             %s
@@ -153,8 +172,6 @@ public class ExtractionService {
 
     private final ChatLanguageModel chatLanguageModel;
     private final PdfService pdfService;
-    private final UserRepository userRepository;
-    private final TransactionService transactionService;
     private final ObjectMapper objectMapper;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -199,17 +216,39 @@ public class ExtractionService {
         String rawText = pdfService.extractText(file);
         log.info("[1/4] PDF okundu. Ham metin: {} karakter", rawText.length());
 
+        if (rawText.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Dosya formatı analiz edilemedi. PDF metin içermiyor; " +
+                    "taranmış (image-only) veya şifreli bir PDF olabilir.");
+        }
+
+        // Ham metnin ilk 800 karakterini logla (debug için)
+        log.debug("[1/4] Ham metin (ilk 800 karakter):\n{}",
+                rawText.substring(0, Math.min(800, rawText.length())));
+
         // Adım B — Pre-processing: gürültü temizleme
         String cleanText = PdfTextCleaner.clean(rawText);
         log.info("[1/4] PdfTextCleaner tamamlandı. Temiz metin: {} karakter", cleanText.length());
 
+        if (cleanText.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Dosya formatı analiz edilemedi. Temizleme sonrası işlenebilir metin kalmadı.");
+        }
+
+        // Temiz metnin ilk 600 karakterini logla
+        log.debug("[1/4] Temiz metin (ilk 600 karakter):\n{}",
+                cleanText.substring(0, Math.min(600, cleanText.length())));
+
         // Adım C — LLM
         String prompt = String.format(PROMPT_TEMPLATE, cleanText);
-        log.info("[2/4] LLM isteği gönderiliyor... (~{} token tahmini)",
+        log.info("[2/4] LLM isteği gönderiliyor... (~{} tahmini token)",
                 prompt.length() / 4);
 
         String jsonResponse = chatLanguageModel.generate(prompt);
-        log.info("[2/4] LLM yanıtı: {} karakter", jsonResponse.length());
+        log.info("[2/4] LLM yanıtı alındı. {} karakter", jsonResponse.length());
+
+        // LLM cevabının tamamını logla (production'da DEBUG seviyesine çek)
+        log.debug("[2/4] LLM ham yanıt:\n{}", jsonResponse);
 
         return jsonResponse;
     }
@@ -219,19 +258,18 @@ public class ExtractionService {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * PDF'ten harcamaları ayıklar, veritabanına kaydeder ve kaydedilen listeyi döner.
+     * PDF'ten harcama DTO'larını ayıklar — saf I/O, hiç DB işlemi yapmaz.
      *
-     * @param file   Kullanıcının yüklediği PDF ekstre dosyası
-     * @param userId Sahip kullanıcının ID'si
-     * @return Veritabanına kaydedilmiş Transaction listesi
+     * <p>Tüm doğrulama kontrolleri (hash, dönem çakışması) tamamlandıktan SONRA
+     * DB'ye yazmak için bu metodu çağırın. Böylece bir doğrulama hatası
+     * DB'deki mevcut verileri bozmaz (eski delete işleminin rollback sorunu ortadan kalkar).
+     *
+     * @param file Kullanıcının yüklediği PDF ekstre dosyası
+     * @return Parse edilmiş TransactionDto listesi (boş olamaz — exception fırlar)
+     * @throws IOException PDF okunamazsa
+     * @throws IllegalArgumentException Geçerli işlem bulunamazsa
      */
-    @Transactional
-    public List<Transaction> extractAndMap(MultipartFile file, Long userId) throws IOException {
-
-        log.info("[1/4] Kullanıcı yükleniyor. userId={}", userId);
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException("Kullanıcı bulunamadı: " + userId));
-        log.info("[1/4] Kullanıcı bulundu: {}", user.getEmail());
+    public List<TransactionDto> extractDtos(MultipartFile file) throws IOException {
 
         log.info("[2/4] JSON ayıklama başlıyor...");
         String json = extractTransactionsAsJson(file);
@@ -241,37 +279,20 @@ public class ExtractionService {
         log.info("[2/4] JSON temizlendi. İlk 120 karakter: {}",
                 cleanJson.substring(0, Math.min(120, cleanJson.length())));
 
-        // Adım 3 — Fault-tolerant parse: her satır bağımsız, biri bozuk olsa diğerleri kurtarılır
+        // Fault-tolerant parse: her satır bağımsız, biri bozuk olsa diğerleri kurtarılır
         log.info("[3/4] Fault-tolerant JSON parse başlıyor...");
         List<TransactionDto> dtos = parseRowsFaultTolerant(cleanJson);
         log.info("[3/4] Parse tamamlandı. {} geçerli DTO.", dtos.size());
 
         if (dtos.isEmpty()) {
+            log.error("[3/4] Hiçbir geçerli işlem çıkarılamadı. cleanJson boyutu: {} karakter",
+                    cleanJson.length());
             throw new IllegalArgumentException(
-                    "PDF'ten hiçbir geçerli işlem çıkarılamadı. " +
-                    "Ekstrerin okunabilir formatta olduğundan emin olun.");
+                    "Dosya formatı analiz edilemedi. PDF'te tanınan bir harcama işlemi bulunamadı. " +
+                    "Lütfen geçerli bir banka ekstresi yüklediğinizden emin olun.");
         }
 
-        // Adım 4 — Eski verileri sil, yenileri kaydet
-        log.info("[4/4] Eski transaction'lar siliniyor. userId={}", userId);
-        transactionService.deleteAllByUserId(userId);
-
-        List<Transaction> transactions = dtos.stream()
-                .map(dto -> Transaction.builder()
-                        .user(user)
-                        .date(dto.date())
-                        .description(dto.description())
-                        .amount(dto.amount())
-                        .category(dto.category())
-                        .currency(dto.currency())
-                        .isSubscription(dto.isSubscription())
-                        .build())
-                .toList();
-
-        List<Transaction> saved = transactionService.saveAllTransactions(transactions);
-        log.info("[4/4] {} adet Transaction kaydedildi.", saved.size());
-
-        return saved;
+        return dtos;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -95,7 +95,8 @@
       "mcp__serena__list_dir",
       "mcp__serena__get_symbols_overview",
       "Bash(npx vite *)",
-      "Bash(mvn test-compile *)"
+      "Bash(mvn test-compile *)",
+      "Bash(PGPASSWORD=postgres psql *)"
     ]
   }
 }

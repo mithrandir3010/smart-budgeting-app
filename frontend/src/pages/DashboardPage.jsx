@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
@@ -35,7 +35,8 @@ function CustomTooltip({ active, payload }) {
 }
 
 export default function DashboardPage() {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const location  = useLocation();
   const { theme, toggleTheme } = useTheme();
   const currentUser = getStoredUser();
   const [summary, setSummary] = useState(null);
@@ -75,6 +76,15 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    // location.key her navigasyonda değişir (React Router v6).
+    // Bu sayede yeni ekstre yüklenip Dashboard'a dönüldüğünde
+    // eski state temizlenir ve taze veri çekilir.
+    setSummary(null);
+    setTransactions([]);
+    setAlerts([]);
+    setError(null);
+    setLoading(true);
+
     Promise.all([getAnalyticsSummary(), getTransactions()])
       .then(([summaryRes, txRes]) => {
         setSummary(summaryRes.data);
@@ -84,7 +94,7 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
 
     fetchAlerts();
-  }, []);
+  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return (

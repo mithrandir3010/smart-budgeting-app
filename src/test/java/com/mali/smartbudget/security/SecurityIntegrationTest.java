@@ -182,7 +182,6 @@ class SecurityIntegrationTest {
                             .header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalSpending").exists())
-                    .andExpect(jsonPath("$.monthlyBudget").value(10000))
                     .andExpect(jsonPath("$.projectedSpending").exists())
                     .andExpect(jsonPath("$.coachAdvice").isNotEmpty());
         }

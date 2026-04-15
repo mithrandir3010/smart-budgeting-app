@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { uploadStatement } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
-import { ArrowLeft, Sun, Moon, FileText, Upload } from 'lucide-react';
+import { ArrowLeft, Sun, Moon, FileText, Upload, BarChart2 } from 'lucide-react';
 
 function extractMessage(data) {
   if (!data) return 'Yükleme sırasında bir hata oluştu.';
@@ -13,10 +13,31 @@ function extractMessage(data) {
 }
 
 export default function UploadPage() {
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState(null); // { type: 'success'|'error'|'duplicate', message }
   const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState(null); // saniye sayacı
+  const timerRef = useRef(null);
+
+  // Başarılı yüklemeden 3 saniye sonra Dashboard'a yönlendir
+  useEffect(() => {
+    if (status?.type === 'success') {
+      setCountdown(3);
+      timerRef.current = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            navigate('/');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [status?.type, navigate]);
 
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
@@ -140,8 +161,24 @@ export default function UploadPage() {
             const { cls, icon } = alertConfig[status.type] || alertConfig.error;
             return (
               <div className={`border rounded-xl px-4 py-3 text-sm leading-relaxed ${cls}`}>
-                <span className="font-bold mr-1">{icon}</span>
-                {status.message}
+                <div className="flex items-start gap-2">
+                  <span className="font-bold flex-shrink-0">{icon}</span>
+                  <span className="flex-1">{status.message}</span>
+                </div>
+                {status.type === 'success' && countdown !== null && (
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <span className="text-xs opacity-75">
+                      {countdown}s içinde analiz sayfasına yönlendiriliyorsun...
+                    </span>
+                    <button
+                      onClick={() => { clearInterval(timerRef.current); navigate('/'); }}
+                      className="flex items-center gap-1.5 text-xs font-semibold underline underline-offset-2 flex-shrink-0"
+                    >
+                      <BarChart2 size={13} />
+                      Hemen Git
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })()}

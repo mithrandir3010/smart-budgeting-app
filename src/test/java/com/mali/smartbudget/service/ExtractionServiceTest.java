@@ -2,11 +2,8 @@ package com.mali.smartbudget.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.mali.smartbudget.model.Transaction;
-import com.mali.smartbudget.model.User;
-import com.mali.smartbudget.repository.UserRepository;
+import com.mali.smartbudget.dto.TransactionDto;
 import dev.langchain4j.model.chat.ChatLanguageModel;
-import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,47 +15,38 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import org.mockito.InOrder;
-
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
+/**
+ * ExtractionService — Birim Testleri
+ *
+ * ExtractionService artık saf I/O sorumluluğuna sahip:
+ *   extractDtos(file) → List<TransactionDto>  (DB işlemi yok)
+ * DB işlemleri (delete + save) StatementService'e taşındı.
+ */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ExtractionService — Birim Testleri")
 class ExtractionServiceTest {
 
     @Mock private ChatLanguageModel chatLanguageModel;
     @Mock private PdfService pdfService;
-    @Mock private UserRepository userRepository;
-    @Mock private TransactionService transactionService;
 
     @InjectMocks
     private ExtractionService extractionService;
 
-    private User testUser;
     private MockMultipartFile dummyFile;
 
     @BeforeEach
-    void setUp() throws Exception {
-        // ObjectMapper'ı servis içine manuel inject et (Mockito @Value'yu enjekte etmez)
+    void setUp() {
         ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
         ReflectionTestUtils.setField(extractionService, "objectMapper", mapper);
-
-        testUser = User.builder()
-                .id(1L)
-                .email("test@example.com")
-                .fullName("Test Kullanıcı")
-                .password("secret")
-                .build();
 
         dummyFile = new MockMultipartFile(
                 "file", "ekstre.pdf", "application/pdf", "PDF içeriği".getBytes()
@@ -104,139 +92,72 @@ class ExtractionServiceTest {
     }
 
     // =========================================================================
-    // extractAndMap — Happy Path
+    // extractDtos — Happy Path
     // =========================================================================
 
     @Test
-    @DisplayName("Başarılı akış: eski veriler silinir, yeni transaction'lar kaydedilir")
-    void extractAndMap_happyPath_deletesOldAndSavesNew() throws IOException {
-        setApiKey("your-api-key-here"); // mock mode → LLM çağrısı yapılmaz
+    @DisplayName("Mock modda extractDtos doğru DTO listesi döner")
+    void extractDtos_mockMode_returnsExpectedDtos() throws IOException {
+        setApiKey("your-api-key-here");
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        List<Transaction> savedTransactions = List.of(
-                buildTransaction("Migros Market", "245.90", "Market"),
-                buildTransaction("Starbucks Kahve", "89.50", "Kafe"),
-                buildTransaction("Kira Ödemesi", "12000.00", "Kira")
-        );
-        when(transactionService.saveAllTransactions(any())).thenReturn(savedTransactions);
-
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
-
-        // deleteAllByUserId KAYDETMEDEN ÖNCE çağrılmalı
-        InOrder inOrder = inOrder(transactionService);
-        inOrder.verify(transactionService).deleteAllByUserId(1L);
-        inOrder.verify(transactionService).saveAllTransactions(any());
-
-        assertThat(result).hasSize(3);
+        assertThat(dtos).isNotEmpty();
+        assertThat(dtos.get(0).description()).isEqualTo("Migros Market");
+        assertThat(dtos.get(0).amount()).isEqualByComparingTo("245.90");
+        assertThat(dtos.get(0).category()).isEqualTo("Market");
+        assertThat(dtos.get(0).currency()).isEqualTo("TRY");
     }
 
     @Test
-    @DisplayName("Kaydedilen transaction'lar doğru alanlarla oluşturulur")
-    void extractAndMap_happyPath_transactionFieldsMappedCorrectly() throws IOException {
+    @DisplayName("Mock modda abonelik işaretleri doğru gelir")
+    void extractDtos_mockMode_subscriptionFlagsCorrect() throws IOException {
         setApiKey("your-api-key-here");
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
-
-        // Mock JSON'daki ilk kayıt: Migros Market, 245.90, Market, TRY, 2026-04-01
-        Transaction first = result.get(0);
-        assertThat(first.getDescription()).isEqualTo("Migros Market");
-        assertThat(first.getAmount()).isEqualByComparingTo("245.90");
-        assertThat(first.getCategory()).isEqualTo("Market");
-        assertThat(first.getCurrency()).isEqualTo("TRY");
-        assertThat(first.getUser()).isEqualTo(testUser);
-    }
-
-    // =========================================================================
-    // deleteAllByUserId davranışı
-    // =========================================================================
-
-    @Test
-    @DisplayName("deleteAllByUserId her zaman saveAll'dan önce çağrılır")
-    void extractAndMap_deleteAlwaysCalledBeforeSave() throws IOException {
-        setApiKey("your-api-key-here");
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenReturn(List.of());
-
-        extractionService.extractAndMap(dummyFile, 1L);
-
-        InOrder inOrder = inOrder(transactionService);
-        inOrder.verify(transactionService).deleteAllByUserId(1L);
-        inOrder.verify(transactionService).saveAllTransactions(any());
-    }
-
-    @Test
-    @DisplayName("Kullanıcı bulunamazsa deleteAllByUserId çağrılmaz")
-    void extractAndMap_userNotFound_deleteNeverCalled() {
-        setApiKey("your-api-key-here");
-        when(userRepository.findById(99L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> extractionService.extractAndMap(dummyFile, 99L))
-                .isInstanceOf(EntityNotFoundException.class);
-
-        verify(transactionService, never()).deleteAllByUserId(anyLong());
-        verify(transactionService, never()).saveAllTransactions(any());
-    }
-
-    // =========================================================================
-    // Hata senaryoları
-    // =========================================================================
-
-    @Test
-    @DisplayName("Bilinmeyen userId ile istek — EntityNotFoundException fırlatılır")
-    void extractAndMap_unknownUserId_throwsEntityNotFoundException() {
-        setApiKey("your-api-key-here");
-        when(userRepository.findById(99L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> extractionService.extractAndMap(dummyFile, 99L))
-                .isInstanceOf(EntityNotFoundException.class)
-                .hasMessageContaining("99");
+        // Mock JSON'da Netflix, Spotify, iCloud subscription=true
+        long subscriptions = dtos.stream().filter(TransactionDto::isSubscription).count();
+        assertThat(subscriptions).isGreaterThanOrEqualTo(3);
     }
 
     @Test
     @DisplayName("LLM geçersiz JSON döndürdüğünde IllegalArgumentException fırlatılır")
-    void extractAndMap_invalidJsonFromLlm_throwsIllegalArgumentException() throws IOException {
-        setApiKey("sk-real-key-from-openai"); // real mode → LLM çağrısı
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+    void extractDtos_invalidJsonFromLlm_throwsIllegalArgumentException() throws IOException {
+        setLlmMode();
         when(pdfService.extractText(any())).thenReturn("PDF metin içeriği");
         doReturn("Bu JSON değil, düz metin.").when(chatLanguageModel).generate(anyString());
 
-        assertThatThrownBy(() -> extractionService.extractAndMap(dummyFile, 1L))
+        assertThatThrownBy(() -> extractionService.extractDtos(dummyFile))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("LLM geçerli bir JSON döndürmedi");
     }
 
     @Test
     @DisplayName("LLM JSON bloğu içinde döndürdüğünde (```json ... ```) temizlenir ve parse edilir")
-    void extractAndMap_llmReturnsJsonBlock_strippedAndParsed() throws IOException {
-        setApiKey("sk-real-key-from-openai");
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(pdfService.extractText(any())).thenReturn("PDF");
+    void extractDtos_llmReturnsJsonBlock_strippedAndParsed() throws IOException {
+        setLlmMode();
+        when(pdfService.extractText(any())).thenReturn("15.04.2026 Migros Market 250,00 TL");
         doReturn("""
                 ```json
                 [
                   {"date": "2026-04-01", "description": "Test", "amount": 100.00, "category": "Diğer", "currency": "TRY"}
                 ]
                 ```""").when(chatLanguageModel).generate(anyString());
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDescription()).isEqualTo("Test");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).description()).isEqualTo("Test");
     }
 
     @Test
     @DisplayName("PdfService IOException fırlattığında dış katmana yayılır")
-    void extractAndMap_pdfServiceThrowsIOException_propagated() throws IOException {
-        setApiKey("sk-real-key-from-openai");
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+    void extractDtos_pdfServiceThrowsIOException_propagated() throws IOException {
+        setLlmMode();
         when(pdfService.extractText(any())).thenThrow(new IOException("PDF okunamadı"));
 
-        assertThatThrownBy(() -> extractionService.extractAndMap(dummyFile, 1L))
+        assertThatThrownBy(() -> extractionService.extractDtos(dummyFile))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("PDF okunamadı");
     }
@@ -247,97 +168,87 @@ class ExtractionServiceTest {
 
     @Test
     @DisplayName("Tarih dd.MM.yyyy formatında parse edilir (05.04.2026)")
-    void extractAndMap_dateFormat_ddmmyyyyDot_parsedCorrectly() throws IOException {
+    void extractDtos_dateFormat_ddmmyyyyDot_parsedCorrectly() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"05.04.2026","description":"Migros","amount":100.00,"category":"Market","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDate()).isEqualTo(LocalDate.of(2026, 4, 5));
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).date()).isEqualTo(LocalDate.of(2026, 4, 5));
     }
 
     @Test
     @DisplayName("Tarih dd/MM/yyyy formatında parse edilir (05/04/2026)")
-    void extractAndMap_dateFormat_ddmmyyyySlash_parsedCorrectly() throws IOException {
+    void extractDtos_dateFormat_ddmmyyyySlash_parsedCorrectly() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"05/04/2026","description":"Starbucks","amount":89.50,"category":"Kafe","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDate()).isEqualTo(LocalDate.of(2026, 4, 5));
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).date()).isEqualTo(LocalDate.of(2026, 4, 5));
     }
 
     @Test
     @DisplayName("Tarih yyyy/MM/dd formatında parse edilir (2026/04/05)")
-    void extractAndMap_dateFormat_yyyymmddSlash_parsedCorrectly() throws IOException {
+    void extractDtos_dateFormat_yyyymmddSlash_parsedCorrectly() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026/04/05","description":"Shell","amount":450.00,"category":"Akaryakıt","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDate()).isEqualTo(LocalDate.of(2026, 4, 5));
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).date()).isEqualTo(LocalDate.of(2026, 4, 5));
     }
 
     @Test
     @DisplayName("Tarih d.M.yyyy kısa formatında parse edilir (5.4.2026)")
-    void extractAndMap_dateFormat_shortDot_parsedCorrectly() throws IOException {
+    void extractDtos_dateFormat_shortDot_parsedCorrectly() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"5.4.2026","description":"Carrefour","amount":320.00,"category":"Market","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDate()).isEqualTo(LocalDate.of(2026, 4, 5));
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).date()).isEqualTo(LocalDate.of(2026, 4, 5));
     }
 
     @Test
     @DisplayName("Tarih dd-MM-yyyy formatında parse edilir (05-04-2026)")
-    void extractAndMap_dateFormat_ddmmyyyyDash_parsedCorrectly() throws IOException {
+    void extractDtos_dateFormat_ddmmyyyyDash_parsedCorrectly() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"05-04-2026","description":"BİM","amount":178.00,"category":"Market","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDate()).isEqualTo(LocalDate.of(2026, 4, 5));
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).date()).isEqualTo(LocalDate.of(2026, 4, 5));
     }
 
     @Test
     @DisplayName("Desteklenen tüm tarih formatları tek JSON'da parse edilir")
-    void extractAndMap_allDateFormats_allRowsParsed() throws IOException {
+    void extractDtos_allDateFormats_allRowsParsed() throws IOException {
         setLlmMode();
         String json = """
                 [
@@ -351,13 +262,11 @@ class ExtractionServiceTest {
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(6);
-        assertThat(result.stream().map(Transaction::getDate))
+        assertThat(dtos).hasSize(6);
+        assertThat(dtos.stream().map(TransactionDto::date))
                 .containsExactlyInAnyOrder(
                         LocalDate.of(2026, 4, 1), LocalDate.of(2026, 4, 2),
                         LocalDate.of(2026, 4, 3), LocalDate.of(2026, 4, 4),
@@ -370,57 +279,50 @@ class ExtractionServiceTest {
 
     @Test
     @DisplayName("Türk formatı string tutar ('1.234,56') → 1234.56 olarak normalize edilir")
-    void extractAndMap_turkishAmountFormat_normalizedCorrectly() throws IOException {
+    void extractDtos_turkishAmountFormat_normalizedCorrectly() throws IOException {
         setLlmMode();
-        // LLM bazen Türk formatında string döner
         String json = """
                 [{"date":"2026-04-01","description":"Migros","amount":"1.234,56","category":"Market","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getAmount()).isEqualByComparingTo("1234.56");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).amount()).isEqualByComparingTo("1234.56");
     }
 
     @Test
     @DisplayName("Virgüllü ondalık string tutar ('89,50') → 89.50 olarak normalize edilir")
-    void extractAndMap_commaDecimalAmount_normalizedCorrectly() throws IOException {
+    void extractDtos_commaDecimalAmount_normalizedCorrectly() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Kafe","amount":"89,50","category":"Kafe","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getAmount()).isEqualByComparingTo("89.50");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).amount()).isEqualByComparingTo("89.50");
     }
 
     @Test
     @DisplayName("Integer tutar (245) → 245.00 olarak normalize edilir")
-    void extractAndMap_integerAmount_normalizedWithTwoDecimals() throws IOException {
+    void extractDtos_integerAmount_normalizedWithTwoDecimals() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"BİM","amount":245,"category":"Market","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getAmount()).isEqualByComparingTo("245.00");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).amount()).isEqualByComparingTo("245.00");
     }
 
     // =========================================================================
@@ -428,8 +330,8 @@ class ExtractionServiceTest {
     // =========================================================================
 
     @Test
-    @DisplayName("null tarihli satır atlanır; geçerli satırlar kaydedilir")
-    void extractAndMap_nullDate_rowSkipped() throws IOException {
+    @DisplayName("null tarihli satır atlanır; geçerli satırlar döner")
+    void extractDtos_nullDate_rowSkipped() throws IOException {
         setLlmMode();
         String json = """
                 [
@@ -439,18 +341,16 @@ class ExtractionServiceTest {
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDescription()).isEqualTo("Geçerli");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).description()).isEqualTo("Geçerli");
     }
 
     @Test
     @DisplayName("Geçersiz tarih formatı ('April 5, 2026') → satır atlanır")
-    void extractAndMap_invalidDateFormat_rowSkipped() throws IOException {
+    void extractDtos_invalidDateFormat_rowSkipped() throws IOException {
         setLlmMode();
         String json = """
                 [
@@ -460,18 +360,16 @@ class ExtractionServiceTest {
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDescription()).isEqualTo("Geçerli");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).description()).isEqualTo("Geçerli");
     }
 
     @Test
     @DisplayName("null tutarlı satır atlanır")
-    void extractAndMap_nullAmount_rowSkipped() throws IOException {
+    void extractDtos_nullAmount_rowSkipped() throws IOException {
         setLlmMode();
         String json = """
                 [
@@ -481,18 +379,16 @@ class ExtractionServiceTest {
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDescription()).isEqualTo("Geçerli");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).description()).isEqualTo("Geçerli");
     }
 
     @Test
     @DisplayName("Sıfır tutarlı satır atlanır (0.00 → geçersiz işlem)")
-    void extractAndMap_zeroAmount_rowSkipped() throws IOException {
+    void extractDtos_zeroAmount_rowSkipped() throws IOException {
         setLlmMode();
         String json = """
                 [
@@ -502,18 +398,16 @@ class ExtractionServiceTest {
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDescription()).isEqualTo("Geçerli");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).description()).isEqualTo("Geçerli");
     }
 
     @Test
-    @DisplayName("Karma JSON: 5 satır, 3'ü geçersiz → 2 geçerli satır kaydedilir")
-    void extractAndMap_partialFailure_onlyValidRowsSaved() throws IOException {
+    @DisplayName("Karma JSON: 5 satır, 3'ü geçersiz → 2 geçerli satır döner")
+    void extractDtos_partialFailure_onlyValidRowsReturned() throws IOException {
         setLlmMode();
         String json = """
                 [
@@ -526,19 +420,17 @@ class ExtractionServiceTest {
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(2);
-        assertThat(result.stream().map(Transaction::getDescription))
+        assertThat(dtos).hasSize(2);
+        assertThat(dtos.stream().map(TransactionDto::description))
                 .containsExactlyInAnyOrder("Geçerli1", "Geçerli2");
     }
 
     @Test
     @DisplayName("Tüm satırlar geçersizse IllegalArgumentException fırlatılır")
-    void extractAndMap_allRowsInvalid_throwsIllegalArgumentException() throws IOException {
+    void extractDtos_allRowsInvalid_throwsIllegalArgumentException() throws IOException {
         setLlmMode();
         String json = """
                 [
@@ -548,11 +440,10 @@ class ExtractionServiceTest {
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
 
-        assertThatThrownBy(() -> extractionService.extractAndMap(dummyFile, 1L))
+        assertThatThrownBy(() -> extractionService.extractDtos(dummyFile))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("hiçbir geçerli işlem");
+                .hasMessageContaining("Dosya formatı analiz edilemedi");
     }
 
     // =========================================================================
@@ -561,110 +452,98 @@ class ExtractionServiceTest {
 
     @Test
     @DisplayName("null description → 'Bilinmeyen' varsayılanı kullanılır")
-    void extractAndMap_nullDescription_defaultsToBilinmeyen() throws IOException {
+    void extractDtos_nullDescription_defaultsToBilinmeyen() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":null,"amount":100.00,"category":"Market","currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getDescription()).isEqualTo("Bilinmeyen");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).description()).isEqualTo("Bilinmeyen");
     }
 
     @Test
     @DisplayName("null category → 'Diğer' varsayılanı kullanılır")
-    void extractAndMap_nullCategory_defaultsToDiger() throws IOException {
+    void extractDtos_nullCategory_defaultsToDiger() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Test","amount":100.00,"category":null,"currency":"TRY"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCategory()).isEqualTo("Diğer");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).category()).isEqualTo("Diğer");
     }
 
     @Test
     @DisplayName("null currency → 'TRY' varsayılanı kullanılır")
-    void extractAndMap_nullCurrency_defaultsToTRY() throws IOException {
+    void extractDtos_nullCurrency_defaultsToTRY() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Test","amount":100.00,"category":"Market","currency":null}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCurrency()).isEqualTo("TRY");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).currency()).isEqualTo("TRY");
     }
 
     @Test
     @DisplayName("boş string currency → 'TRY' varsayılanı kullanılır")
-    void extractAndMap_emptyCurrency_defaultsToTRY() throws IOException {
+    void extractDtos_emptyCurrency_defaultsToTRY() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Test","amount":100.00,"category":"Market","currency":""}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).getCurrency()).isEqualTo("TRY");
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).currency()).isEqualTo("TRY");
     }
 
     @Test
     @DisplayName("isSubscription string 'true' → boolean true olarak parse edilir")
-    void extractAndMap_isSubscriptionStringTrue_parsedAsTrue() throws IOException {
+    void extractDtos_isSubscriptionStringTrue_parsedAsTrue() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Netflix","amount":79.99,"category":"Eğlence","currency":"TRY","isSubscription":"true"}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).isSubscription()).isTrue();
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).isSubscription()).isTrue();
     }
 
     @Test
     @DisplayName("isSubscription null → false varsayılan değeri kullanılır")
-    void extractAndMap_isSubscriptionNull_defaultsFalse() throws IOException {
+    void extractDtos_isSubscriptionNull_defaultsFalse() throws IOException {
         setLlmMode();
         String json = """
                 [{"date":"2026-04-01","description":"Market","amount":200.00,"category":"Market","currency":"TRY","isSubscription":null}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
-        when(transactionService.saveAllTransactions(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        List<Transaction> result = extractionService.extractAndMap(dummyFile, 1L);
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).isSubscription()).isFalse();
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).isSubscription()).isFalse();
     }
 
     // =========================================================================
@@ -675,23 +554,8 @@ class ExtractionServiceTest {
         ReflectionTestUtils.setField(extractionService, "openAiApiKey", key);
     }
 
-    /**
-     * Mock mode'dan çıkar ve LLM moduna geçer.
-     * {@code forceMockMode=false} + "sk-..." API key → {@code isMockMode()} false döner.
-     */
     private void setLlmMode() {
         ReflectionTestUtils.setField(extractionService, "forceMockMode", false);
         ReflectionTestUtils.setField(extractionService, "openAiApiKey", "sk-test-real-looking-key");
-    }
-
-    private Transaction buildTransaction(String description, String amount, String category) {
-        return Transaction.builder()
-                .user(testUser)
-                .date(LocalDate.of(2026, 4, 1))
-                .description(description)
-                .amount(new BigDecimal(amount))
-                .category(category)
-                .currency("TRY")
-                .build();
     }
 }

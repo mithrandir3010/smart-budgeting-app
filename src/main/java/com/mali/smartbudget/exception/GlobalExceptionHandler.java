@@ -71,6 +71,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException e) {
+        // PDF analiz hataları kullanıcıya net mesajla döner (stack trace loglanmaz)
+        if (e.getMessage() != null && e.getMessage().startsWith("Dosya formatı analiz edilemedi")) {
+            log.warn("PDF analiz hatası: {}", e.getMessage());
+            return build(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+        }
         log.error("IllegalArgumentException: {}", e.getMessage(), e);
         return build(HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
     }

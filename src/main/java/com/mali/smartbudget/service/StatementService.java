@@ -1,5 +1,6 @@
 package com.mali.smartbudget.service;
 
+import com.mali.smartbudget.dto.TransactionDto;
 import com.mali.smartbudget.exception.DuplicateStatementException;
 import com.mali.smartbudget.model.Statement;
 import com.mali.smartbudget.model.StatementStatus;
@@ -28,19 +29,18 @@ import java.util.Optional;
  * <pre>
  *  1. SHA-256 hash hesapla (ChecksumUtil)
  *  2. Hash mükerrerlik kontrolü → 409 DuplicateStatementException
- *  3. ExtractionService.extractAndMap() — bu @Transactional'a JOIN olur
- *       ↳ Harcamaları sil + yenilerini kaydet
+ *  3. ExtractionService.extractDtos() — saf I/O, hiç DB yazma yok
+ *       ↳ PDF okunur, LLM çağrılır, DTO listesi döner
  *  4. Dönem (periodStart/periodEnd) hesapla
  *  5. Dönem çakışma kontrolü → 409 DuplicateStatementException
- *       ↳ Çakışma varsa tüm transaction ROLLBACK (deleteAll geri alınır)
- *  6. Statement metadata'yı kaydet
+ *  6. Eski transaction'ları sil (bulk DELETE) + yenilerini kaydet
+ *  7. Statement metadata'yı kaydet
  * </pre>
  *
- * <h3>Neden tek @Transactional?</h3>
- * ExtractionService.extractAndMap() varsayılan REQUIRED propagation ile
- * bu sınıfın başlattığı transaction'a JOIN olur. Adım 5'te conflict
- * exception fırlatılırsa, adım 3'teki deleteAll + saveAll da rollback'e
- * dahil olur — kullanıcının mevcut verisi bozulmaz.
+ * <h3>Neden bu sıra?</h3>
+ * Eski tasarımda delete+save adım 3'te yapılıyordu; adım 5'te conflict
+ * fırlarsa rollback, kullanıcı ekranında "eski veri" görünüyordu.
+ * Yeni tasarımda tüm doğrulamalar tamamlandıktan SONRA DB'ye yazılıyor.
  */
 @Slf4j
 @Service
@@ -50,6 +50,7 @@ public class StatementService {
     private final StatementRepository statementRepository;
     private final UserRepository      userRepository;
     private final ExtractionService   extractionService;
+    private final TransactionService  transactionService;
 
     /**
      * PDF ekstreyi işler: mükerrerlik kontrolü → ayıklama → dönem kontrolü → kayıt.
@@ -68,35 +69,35 @@ public class StatementService {
         // ── Adım 1: SHA-256 ───────────────────────────────────────────────────
         byte[] bytes    = file.getBytes();
         String checksum = ChecksumUtil.sha256(bytes);
-        log.info("[Upload 1/5] SHA-256 hesaplandı: {}... | dosya={}", checksum.substring(0, 12), fileName);
+        log.info("[Upload 1/6] SHA-256 hesaplandı: {}... | dosya={}", checksum.substring(0, 12), fileName);
 
         // ── Adım 2: Hash mükerrerlik kontrolü ────────────────────────────────
         if (statementRepository.existsByUserIdAndSha256Checksum(userId, checksum)) {
-            log.warn("[Upload 2/5] HASH MÜKERRERİ — userId={}, checksum={}...", userId, checksum.substring(0, 8));
+            log.warn("[Upload 2/6] HASH MÜKERRERİ — userId={}, checksum={}...", userId, checksum.substring(0, 8));
             throw new DuplicateStatementException(
                     "Bu dosya daha önce yüklendi. Aynı PDF içeriği sistemde zaten kayıtlı.",
                     DuplicateStatementException.Type.HASH, null, null
             );
         }
-        log.info("[Upload 2/5] Hash kontrolü geçildi.");
+        log.info("[Upload 2/6] Hash kontrolü geçildi.");
 
-        // ── Adım 3: PDF ayıklama + kayıt (bu @Transactional'a JOIN olur) ─────
-        log.info("[Upload 3/5] Extraction başlıyor...");
-        List<Transaction> saved = extractionService.extractAndMap(file, userId);
-        log.info("[Upload 3/5] {} işlem ayıklandı ve kaydedildi.", saved.size());
+        // ── Adım 3: PDF ayıklama — saf I/O, DB'ye hiçbir şey yazılmıyor ──────
+        log.info("[Upload 3/6] Extraction başlıyor (saf I/O)...");
+        List<TransactionDto> dtos = extractionService.extractDtos(file);
+        log.info("[Upload 3/6] {} DTO ayıklandı.", dtos.size());
 
         // ── Adım 4: Dönem hesaplama ───────────────────────────────────────────
-        Optional<LocalDate> periodStart = saved.stream()
-                .map(Transaction::getDate)
+        Optional<LocalDate> periodStart = dtos.stream()
+                .map(TransactionDto::date)
                 .min(Comparator.naturalOrder());
-        Optional<LocalDate> periodEnd = saved.stream()
-                .map(Transaction::getDate)
+        Optional<LocalDate> periodEnd = dtos.stream()
+                .map(TransactionDto::date)
                 .max(Comparator.naturalOrder());
 
         if (periodStart.isPresent()) {
-            log.info("[Upload 4/5] Dönem: {} – {}", periodStart.get(), periodEnd.get());
+            log.info("[Upload 4/6] Dönem: {} – {}", periodStart.get(), periodEnd.get());
         } else {
-            log.warn("[Upload 4/5] İşlem tarihi bulunamadı — dönem boş.");
+            log.warn("[Upload 4/6] İşlem tarihi bulunamadı — dönem boş.");
         }
 
         // ── Adım 5: Dönem çakışma kontrolü ───────────────────────────────────
@@ -105,7 +106,7 @@ public class StatementService {
                     userId, periodStart.get(), periodEnd.get());
 
             if (conflictCount > 0) {
-                log.warn("[Upload 5/5] DÖNEM ÇAKIŞMASI — userId={}, dönem={} – {}, çakışan kayıt={}",
+                log.warn("[Upload 5/6] DÖNEM ÇAKIŞMASI — userId={}, dönem={} – {}, çakışan kayıt={}",
                         userId, periodStart.get(), periodEnd.get(), conflictCount);
                 throw new DuplicateStatementException(
                         "Bu ekstre dönemi zaten kayıtlı! %s – %s aralığını kapsayan bir ekstre mevcut."
@@ -115,11 +116,28 @@ public class StatementService {
                 );
             }
         }
-        log.info("[Upload 5/5] Dönem kontrolü geçildi.");
+        log.info("[Upload 5/6] Dönem kontrolü geçildi.");
 
-        // ── Adım 6: Statement metadata kaydet ────────────────────────────────
+        // ── Adım 6: Eski transaction'ları sil + yenileri kaydet + statement kaydet ──
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Kullanıcı bulunamadı: " + userId));
+
+        log.info("[Upload 6/6] Eski transaction'lar siliniyor ve yenileri kaydediliyor...");
+        transactionService.deleteAllByUserId(userId);
+
+        List<Transaction> transactions = dtos.stream()
+                .map(dto -> Transaction.builder()
+                        .user(user)
+                        .date(dto.date())
+                        .description(dto.description())
+                        .amount(dto.amount())
+                        .category(dto.category())
+                        .currency(dto.currency())
+                        .isSubscription(dto.isSubscription())
+                        .build())
+                .toList();
+        List<Transaction> saved = transactionService.saveAllTransactions(transactions);
+        log.info("[Upload 6/6] {} adet Transaction kaydedildi.", saved.size());
 
         Statement statement = Statement.builder()
                 .user(user)
