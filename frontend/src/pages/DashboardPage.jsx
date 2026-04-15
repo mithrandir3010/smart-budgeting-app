@@ -266,9 +266,6 @@ export default function DashboardPage() {
         {/* Subscription card */}
         <SubscriptionCard />
 
-        {/* Installment card — only rendered when installment transactions exist */}
-        <InstallmentCard transactions={transactions} />
-
         {/* Pie chart */}
         {pieData.length > 0 && (
           <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-800 p-6">
@@ -326,6 +323,9 @@ export default function DashboardPage() {
           </h2>
           <TransactionsTable transactions={transactions} />
         </div>
+
+        {/* Installment card — TransactionsTable'ın hemen altında */}
+        <InstallmentCard transactions={transactions} />
 
       </main>
     </div>

@@ -30,11 +30,12 @@ public final class PdfTextCleaner {
     private PdfTextCleaner() {}
 
     // ── Sayfa numarası satırları ──────────────────────────────────────────────
-    // "Sayfa 1/5", "Sayfa: 1 / 5", "Page 2 of 10", "1/5" (tek başına satırda)
+    // "Sayfa 1/5", "Sayfa: 1 / 5", "Page 2 of 10"
+    // NOT: "^\d+/\d+$" pattern'ı KALDIRILDI — taksit fraksiyonlarını (2/3, 1/6)
+    // yanlışlıkla siliyordu. Sayfa numaralarını bağlamsal kelimeyle yakala.
     private static final Pattern PAGE_NUMBER = Pattern.compile(
         "(?im)^.*\\bsayfa\\s*:?\\s*\\d+\\s*/\\s*\\d+.*$" +
-        "|^.*\\bpage\\s+\\d+\\s+of\\s+\\d+.*$" +
-        "|^\\s*\\d+\\s*/\\s*\\d+\\s*$"
+        "|^.*\\bpage\\s+\\d+\\s+of\\s+\\d+.*$"
     );
 
     // ── Ayırıcı / dekoratif çizgiler ─────────────────────────────────────────

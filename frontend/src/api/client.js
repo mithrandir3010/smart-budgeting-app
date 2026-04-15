@@ -20,6 +20,12 @@ client.interceptors.response.use(
     const status  = error.response?.status;
     const message = error.response?.data?.message;
 
+    // Axios timeout (ECONNABORTED) veya ağ kopması — cevap yok
+    if (error.code === 'ECONNABORTED' || !error.response) {
+      toast.error('Sunucu yanıt vermedi. PDF işleme zaman aşımına uğramış olabilir. Lütfen tekrar deneyin.');
+      return Promise.reject(error);
+    }
+
     if (status === 401) {
       localStorage.removeItem('jwt_token');
       localStorage.removeItem('user_info');
@@ -33,7 +39,7 @@ client.interceptors.response.use(
     } else if (status === 413) {
       toast.error('Dosya boyutu çok büyük (max 2MB).');
     } else if (status >= 500) {
-      toast.error('Sunucu hatası. Lütfen daha sonra tekrar deneyin.');
+      toast.error('PDF analizi başarısız oldu. Lütfen tekrar deneyin.');
     }
     // 400/422/404 hataları bileşen seviyesinde yönetilir (forma özel mesajlar)
 
@@ -84,6 +90,8 @@ export const uploadStatement = (file) => {
   formData.append('file', file);
   return client.post('/api/v1/statements/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    // PDF extraction LLM çağrısı ~60-90s sürebilir; 140s ile güvenli marj bırak
+    timeout: 140_000,
   });
 };
 

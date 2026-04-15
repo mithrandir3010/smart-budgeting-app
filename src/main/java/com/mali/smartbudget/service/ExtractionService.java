@@ -101,13 +101,20 @@ public class ExtractionService {
             isSubscription false: all other transactions
 
             INSTALLMENT RULES — CRITICAL, NO EXCEPTIONS:
-            • A transaction is installment (isInstallment:true) if its description contains ANY of:
+            • A transaction is installment (isInstallment:true) if its row OR the sub-line
+              immediately below it contains ANY of:
               – A fraction pattern like 2/6, 3/12, 1/9, 4/24 (current/total)
-              – The word "Taksit", "TAKSİT", "TAKSIT", "taksit", "taksitli", "TAKSİTLİ"
+              – Any form of the word: "Taksit","TAKSİT","TAKSIT","taksit",
+                "taksidi","TAKSİDİ","taksitli","TAKSİTLİ"
+            • Turkish bank sub-line format — VERY COMMON:
+              "1.237,60 TL'lik işlemin 2/3 taksidi"
+              "2.400,00 TL'lik işlemin 1/6 taksidi"
+              These sub-lines belong to the transaction on the line ABOVE them.
+              Extract fraction from sub-line as currentInstallment/totalInstallments.
             • If isInstallment is true, you MUST set currentInstallment and totalInstallments.
               NEVER leave them null when isInstallment is true.
               – If fraction X/Y exists → currentInstallment:X, totalInstallments:Y
-              – If only "Taksit" keyword (no fraction) → currentInstallment:1, totalInstallments:1
+              – If only keyword (no fraction) → currentInstallment:1, totalInstallments:1
 
             SKIP: balance rows, IBAN, page headers/footers, VAT/fee lines, incoming transfers, refunds.
             Extract AT MOST 60 transactions.
@@ -125,6 +132,12 @@ public class ExtractionService {
               → {"date":"2026-04-08","description":"Apple Store","amount":245.90,"category":"Teknoloji","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":2,"totalInstallments":6}
             "12.04.2026 TAKSİT ÖDEMESİ 500,00 TL"
               → {"date":"2026-04-12","description":"Taksit Ödemesi","amount":500.00,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":1}
+            "14 Ocak 2026  TURKCELL    412,53
+             1.237,60 TL'lik işlemin 2/3 taksidi"
+              → {"date":"2026-01-14","description":"Turkcell","amount":412.53,"category":"Fatura","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":2,"totalInstallments":3}
+            "23 Ocak 2026  İYZİCO/ERCAN CANDAN  1.600,00
+             2.400,00 TL'lik işlemin 1/6 taksidi"
+              → {"date":"2026-01-23","description":"İyzico","amount":1600.00,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":6}
 
             Statement:
             %s
