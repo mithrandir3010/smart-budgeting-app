@@ -5,6 +5,14 @@ import { uploadStatement } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
 import { ArrowLeft, Sun, Moon, FileText, Upload, BarChart2 } from 'lucide-react';
 
+const LOADING_STEPS = [
+  'PDF okunuyor...',
+  'İşlemler analiz ediliyor...',
+  'Kategoriler belirleniyor...',
+  'AI önerileri hazırlanıyor...',
+  'Sonuçlar kayıt ediliyor...',
+];
+
 function extractMessage(data) {
   if (!data) return 'Yükleme sırasında bir hata oluştu.';
   if (typeof data === 'string') return data;
@@ -19,7 +27,9 @@ export default function UploadPage() {
   const [status, setStatus] = useState(null); // { type: 'success'|'error'|'duplicate', message }
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(null); // saniye sayacı
+  const [stepIndex, setStepIndex] = useState(0);
   const timerRef = useRef(null);
+  const stepTimerRef = useRef(null);
 
   // Başarılı yüklemeden 3 saniye sonra Dashboard'a yönlendir
   useEffect(() => {
@@ -59,7 +69,11 @@ export default function UploadPage() {
       return;
     }
     setLoading(true);
+    setStepIndex(0);
     setStatus(null);
+    stepTimerRef.current = setInterval(() => {
+      setStepIndex((prev) => (prev + 1) % LOADING_STEPS.length);
+    }, 1800);
     try {
       const res = await uploadStatement(file);
       const msg = typeof res.data === 'string' ? res.data : 'Ekstre başarıyla yüklendi.';
@@ -81,6 +95,7 @@ export default function UploadPage() {
         setStatus({ type: 'error', message: msg });
       }
     } finally {
+      clearInterval(stepTimerRef.current);
       setLoading(false);
     }
   };
@@ -93,6 +108,48 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex justify-center px-4 py-10 transition-colors">
+
+      {/* Loading overlay */}
+      {loading && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-zinc-950/75 backdrop-blur-sm">
+          {/* Spinning rings */}
+          <div className="relative w-24 h-24 mb-8">
+            <div className="absolute inset-0 rounded-full border-4 border-indigo-500/15" />
+            <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-indigo-500 animate-spin" style={{ animationDuration: '1s' }} />
+            <div className="absolute inset-[7px] rounded-full border-4 border-transparent border-t-indigo-400/50 animate-spin" style={{ animationDuration: '1.6s', animationDirection: 'reverse' }} />
+            <div className="absolute inset-[18px] rounded-full bg-indigo-500/10 flex items-center justify-center">
+              <BarChart2 size={18} className="text-indigo-400" strokeWidth={1.8} />
+            </div>
+          </div>
+
+          {/* Step text with fade key */}
+          <div className="text-center space-y-2 px-6">
+            <p
+              key={stepIndex}
+              className="text-white font-semibold text-sm animate-pulse"
+            >
+              {LOADING_STEPS[stepIndex]}
+            </p>
+            <p className="text-zinc-500 text-xs">Bu işlem birkaç saniye sürebilir</p>
+          </div>
+
+          {/* Progress dots */}
+          <div className="flex gap-1.5 mt-6">
+            {LOADING_STEPS.map((_, i) => (
+              <div
+                key={i}
+                className={`h-1 rounded-full transition-all duration-500 ${
+                  i === stepIndex
+                    ? 'w-5 bg-indigo-500'
+                    : i < stepIndex
+                    ? 'w-1.5 bg-indigo-500/40'
+                    : 'w-1.5 bg-zinc-700'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       <button
         onClick={toggleTheme}

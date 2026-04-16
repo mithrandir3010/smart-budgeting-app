@@ -95,12 +95,14 @@ export default function DashboardPage() {
       setSummary(null);
       setTransactions([]);
       setAlerts([]);
-      // Re-fetch to get empty state from backend
+      setLoading(true);
       const [summaryRes, txRes] = await Promise.all([getAnalyticsSummary(), getTransactions()]);
       setSummary(summaryRes.data);
       setTransactions(txRes.data);
     } catch {
       // error toast handled by client interceptor
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -138,6 +140,21 @@ export default function DashboardPage() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <p className="text-rose-500">{error}</p>
+      </div>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-zinc-950 gap-4">
+        <p className="text-zinc-500 dark:text-zinc-400 text-sm">Henüz ekstre yüklenmedi.</p>
+        <Link
+          to="/upload"
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+        >
+          <Upload size={13} strokeWidth={2.5} />
+          Ekstre Yükle
+        </Link>
       </div>
     );
   }
