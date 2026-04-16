@@ -53,7 +53,7 @@ export default function DashboardPage() {
     if (!summary) return;
     setPdfLoading(true);
     try {
-      await generateReport({ summary, transactions });
+      await generateReport({ summary, transactions, user: currentUser });
     } finally {
       setPdfLoading(false);
     }
