@@ -90,8 +90,8 @@ export const uploadStatement = (file) => {
   formData.append('file', file);
   return client.post('/api/v1/statements/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    // PDF extraction LLM çağrısı ~60-90s sürebilir; 140s ile güvenli marj bırak
-    timeout: 140_000,
+    // PDF extraction LLM çağrısı ~60-90s sürebilir; 210s ile güvenli marj bırak
+    timeout: 210_000,
   });
 };
 

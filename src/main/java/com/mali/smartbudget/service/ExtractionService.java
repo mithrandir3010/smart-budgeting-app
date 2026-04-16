@@ -21,6 +21,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -100,44 +101,47 @@ public class ExtractionService {
                                   GoogleOne/Gym üyelik/Adobe/Office365/Dergi abonelik
             isSubscription false: all other transactions
 
-            INSTALLMENT RULES — CRITICAL, NO EXCEPTIONS:
-            • A transaction is installment (isInstallment:true) if its row OR the sub-line
-              immediately below it contains ANY of:
-              – A fraction pattern like 2/6, 3/12, 1/9, 4/24 (current/total)
-              – Any form of the word: "Taksit","TAKSİT","TAKSIT","taksit",
-                "taksidi","TAKSİDİ","taksitli","TAKSİTLİ"
-            • Turkish bank sub-line format — VERY COMMON:
-              "1.237,60 TL'lik işlemin 2/3 taksidi"
-              "2.400,00 TL'lik işlemin 1/6 taksidi"
-              These sub-lines belong to the transaction on the line ABOVE them.
-              Extract fraction from sub-line as currentInstallment/totalInstallments.
-            • If isInstallment is true, you MUST set currentInstallment and totalInstallments.
-              NEVER leave them null when isInstallment is true.
-              – If fraction X/Y exists → currentInstallment:X, totalInstallments:Y
-              – If only keyword (no fraction) → currentInstallment:1, totalInstallments:1
+            INSTALLMENT DETECTION — READ EVERY LINE AND THE LINE BELOW IT:
+            A transaction is installment (isInstallment:true) when EITHER condition is met:
+              A) The transaction's own line contains any of: taksit, TAKSİT, taksidi, TAKSİDİ,
+                 taksitli, TAKSİTLİ, TAKSIT (case-insensitive)
+              B) The line IMMEDIATELY below the transaction contains the pattern:
+                 "[amount] TL'lik işlemin [N] / [M] taksidi"
+                 (spaces around / are normal in Turkish bank statements)
 
-            SKIP: balance rows, IBAN, page headers/footers, VAT/fee lines, incoming transfers, refunds.
-            Extract AT MOST 60 transactions.
+            When condition B applies:
+            – The amount, date, description come from the UPPER line
+            – N and M come from the sub-line: currentInstallment=N, totalInstallments=M
+            – The number after the merchant name like "1.200,00 / 3" is remaining-amount/remaining-count,
+              NOT the installment fraction — use ONLY the "taksidi" sub-line for N and M.
+
+            When condition A applies (taksit keyword in same line):
+            – If the line also contains N/M or N / M fraction → currentInstallment=N, totalInstallments=M
+            – Otherwise → currentInstallment=1, totalInstallments=1
+
+            SKIP: balance rows, IBAN, page headers/footers, VAT/fee lines, incoming transfers,
+                  refunds, any row containing "TAKSİTLENDİRME İŞLEM FAİZİ".
+            Extract AT MOST 150 transactions.
 
             EXAMPLES:
             "15.03.2026 MIGROS 1.250,00 TL"
               → {"date":"2026-03-15","description":"Migros","amount":1250.00,"category":"Market","currency":"TRY","isSubscription":false,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
-            "01.04.2026 GIDA MARKET 340,00 TL"
-              → {"date":"2026-04-01","description":"Gıda Market","amount":340.00,"category":"Market","currency":"TRY","isSubscription":false,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
             "01.04.2026 NETFLIX.COM 149,90 TL"
               → {"date":"2026-04-01","description":"Netflix","amount":149.90,"category":"Eğlence","currency":"TRY","isSubscription":true,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
+            "14 Ocak 2026 TURKCELL 412,53
+             1.237,60 TL'lik işlemin 3 / 3 taksidi 515,30"
+              → {"date":"2026-01-14","description":"Turkcell","amount":412.53,"category":"Fatura","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":3,"totalInstallments":3}
+            "23 Ocak 2026 İYZİCO/ERCAN CANDAN 400,00 1.200,00 / 3
+             2.400,00 TL'lik işlemin 3 / 6 taksidi"
+              → {"date":"2026-01-23","description":"İyzico/Ercan Candan","amount":400.00,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":3,"totalInstallments":6}
+            "07 Mart 2026 TODTV.COM.TR 179,00 1.969,00 / 11
+             2.148,00 TL'lik işlemin 1 / 12 taksidi"
+              → {"date":"2026-03-07","description":"Todtv.com.tr","amount":179.00,"category":"Eğlence","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":12}
+            "14 Mart 2026 AVIS.COM.TR 2.501,15 12.505,75 / 5
+             15.006,90 TL'lik işlemin 1 / 6 taksidi"
+              → {"date":"2026-03-14","description":"Avis.com.tr","amount":2501.15,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":6}
             "10.04.2026 SAMSUNG TV 3/12 TAKSİT 850,50 TL"
               → {"date":"2026-04-10","description":"Samsung TV","amount":850.50,"category":"Teknoloji","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":3,"totalInstallments":12}
-            "08.04.2026 APPLE STORE 2/6 TAKSIT 245,90 TL"
-              → {"date":"2026-04-08","description":"Apple Store","amount":245.90,"category":"Teknoloji","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":2,"totalInstallments":6}
-            "12.04.2026 TAKSİT ÖDEMESİ 500,00 TL"
-              → {"date":"2026-04-12","description":"Taksit Ödemesi","amount":500.00,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":1}
-            "14 Ocak 2026  TURKCELL    412,53
-             1.237,60 TL'lik işlemin 2/3 taksidi"
-              → {"date":"2026-01-14","description":"Turkcell","amount":412.53,"category":"Fatura","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":2,"totalInstallments":3}
-            "23 Ocak 2026  İYZİCO/ERCAN CANDAN  1.600,00
-             2.400,00 TL'lik işlemin 1/6 taksidi"
-              → {"date":"2026-01-23","description":"İyzico","amount":1600.00,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":6}
 
             Statement:
             %s
@@ -146,10 +150,10 @@ public class ExtractionService {
     /**
      * PDF metninden LLM'e gönderilecek maksimum karakter sayısı.
      *
-     * <p>~3 000 token'a karşılık gelir; geri kalan token bütçesi (4096 max_tokens) JSON çıktısına ayrılır.
+     * <p>~9 000 token'a karşılık gelir; geri kalan token bütçesi (4096 max_tokens) JSON çıktısına ayrılır.
      * Daha uzun metinler bu sınırda kesilir ve log'a uyarı yazılır.
      */
-    private static final int MAX_INPUT_CHARS = 12_000;
+    private static final int MAX_INPUT_CHARS = 60_000;
 
     // Tarih formatları (LLM bazen farklı format döner — tümünü destekle)
     private static final List<DateTimeFormatter> DATE_FORMATTERS = List.of(
@@ -184,6 +188,41 @@ public class ExtractionService {
     private static final Pattern AMOUNT_JSON_PATTERN = Pattern.compile(
             "(\"amount\"\\s*:\\s*)(\"?)(\\d[\\d.]*(?:,\\d+)?)(\"?)",
             Pattern.CASE_INSENSITIVE
+    );
+
+    // ── Kural tabanlı taksit post-processor pattern'ları ─────────────────────
+    /** "1.237,60 TL'lik işlemin 3 / 3 taksidi" — group1=toplam tutar, group2=N, group3=M */
+    private static final Pattern TAKSIT_SUBLINE_FULL = Pattern.compile(
+            "(\\d{1,3}(?:\\.\\d{3})*,\\d{2})\\s+TL.lik\\s+i\\u015flemin\\s+(\\d{1,2})\\s*/\\s*(\\d{1,3})\\s+taksidi",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    /** Kalan taksit sayısı suffix: "/ 11", "/ 2" */
+    private static final Pattern REMAINING_COUNT = Pattern.compile("/\\s*\\d{1,3}\\b");
+
+    /** Ülke/şebeke kodu: satır içindeki " TR", " TU" */
+    private static final Pattern COUNTRY_CODE = Pattern.compile("(?<=\\s)(TR|TU)(?=\\s|$)");
+
+    /** Satır sonundaki puan değerleri (215, 775, 1501 gibi) */
+    private static final Pattern TRAILING_INT = Pattern.compile("\\s+\\d{1,4}\\s*$");
+
+    /** "14 Ocak 2026", "7 Mart 2026" — Türkçe ay adıyla tarih */
+    private static final Pattern TURKISH_DATE_IN_LINE = Pattern.compile(
+            "\\b(\\d{1,2})\\s+(ocak|\\u015fubat|mart|nisan|may\\u0131s|haziran|" +
+            "temmuz|a\\u011fustos|eyl\\u00fcl|ekim|kas\\u0131m|aral\\u0131k)\\s+(\\d{4})\\b",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    /** Türk formatı tutar: "412,53", "1.765,83", "2.501,15" */
+    private static final Pattern TURKISH_AMOUNT_IN_LINE = Pattern.compile(
+            "\\b(\\d{1,3}(?:\\.\\d{3})*,\\d{2})\\b"
+    );
+
+    private static final Map<String, Integer> TURKISH_MONTHS = Map.ofEntries(
+            Map.entry("ocak", 1),   Map.entry("şubat", 2),  Map.entry("mart", 3),
+            Map.entry("nisan", 4),  Map.entry("mayıs", 5),  Map.entry("haziran", 6),
+            Map.entry("temmuz", 7), Map.entry("ağustos", 8), Map.entry("eylül", 9),
+            Map.entry("ekim", 10),  Map.entry("kasım", 11), Map.entry("aralık", 12)
     );
 
     @Value("${langchain4j.open-ai.chat-model.api-key}")
@@ -249,16 +288,20 @@ public class ExtractionService {
                     "Dosya formatı analiz edilemedi. Temizleme sonrası işlenebilir metin kalmadı.");
         }
 
-        // Temiz metnin ilk 600 karakterini logla
-        log.debug("[1/4] Temiz metin (ilk 600 karakter):\n{}",
-                cleanText.substring(0, Math.min(600, cleanText.length())));
+        // Temiz metnin ilk 800 karakterini logla
+        log.debug("[1/4] Temiz metin (ilk 800 karakter):\n{}",
+                cleanText.substring(0, Math.min(800, cleanText.length())));
 
         // Adım C — Chunking: metin çok uzunsa keserek token bütçesini koru
         String inputText = cleanText;
+        log.info("[1/4] Temiz metin toplam {} karakter (limit: {}).",
+                inputText.length(), MAX_INPUT_CHARS);
         if (inputText.length() > MAX_INPUT_CHARS) {
-            log.warn("[1/4] Metin {} karakter — {} karaktere kırpılıyor (max_tokens bütçesi korunur).",
+            log.warn("[1/4] Metin {} karakter — {} karaktere kırpılıyor. Ekstre tam olarak işlenemiyor!",
                     inputText.length(), MAX_INPUT_CHARS);
             inputText = inputText.substring(0, MAX_INPUT_CHARS);
+        } else {
+            log.info("[1/4] Metin limite sığıyor — kırpma yok, tüm ekstre işlenecek.");
         }
 
         // Adım D — LLM
@@ -331,6 +374,18 @@ public class ExtractionService {
             throw new IllegalArgumentException(
                     "Dosya formatı analiz edilemedi. PDF'te tanınan bir harcama işlemi bulunamadı. " +
                     "Lütfen geçerli bir banka ekstresi yüklediğinizden emin olun.");
+        }
+
+        // ── [4/4] Kural tabanlı taksit post-processor ────────────────────────
+        // LLM'in gözden kaçırdığı "N / M taksidi" satırlarını Java regex ile yakala.
+        // PDF metni tekrar okunur (bytes hafızada — maliyetsiz).
+        log.info("[4/4] Kural tabanlı taksit post-processor başlıyor...");
+        try {
+            String rawTextForEnrich = pdfService.extractText(file);
+            String cleanTextForEnrich = PdfTextCleaner.clean(rawTextForEnrich);
+            dtos = enrichWithInstallments(dtos, cleanTextForEnrich);
+        } catch (Exception e) {
+            log.warn("[4/4] Post-processor başarısız, atlanıyor: {}", e.getMessage());
         }
 
         return dtos;
@@ -527,6 +582,141 @@ public class ExtractionService {
      * @param json markdown çitleri ve sayı sanitasyonu uygulanmış JSON string'i
      * @return geçerli (veya daha geçerli) JSON string'i
      */
+    // ─────────────────────────────────────────────────────────────────────────
+    // Kural Tabanlı Taksit Post-Processor
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Temiz PDF metnini satır satır tarayarak "N / M taksidi" pattern'larını bulur,
+     * hemen üstündeki işlem satırından tarih ve tutar bilgisini çıkarır,
+     * eşleşen DTO'ları güncelleyerek taksit bilgilerini ekler.
+     *
+     * <p>LLM'in gözden kaçırdığı veya yanlış okuduğu taksitleri kural tabanlı kurtarır.
+     * Yapı Kredi / Worldcard formatını doğrudan destekler.
+     *
+     * @param dtos      LLM'den parse edilen DTO listesi
+     * @param cleanText PdfTextCleaner'dan geçmiş temiz PDF metni
+     * @return Taksit bilgileri zenginleştirilmiş DTO listesi
+     */
+    private List<TransactionDto> enrichWithInstallments(List<TransactionDto> dtos, String cleanText) {
+        String[] lines = cleanText.split("\n");
+        List<TransactionDto> result = new ArrayList<>(dtos);
+        int enriched = 0;
+        int created  = 0;
+
+        for (int i = 1; i < lines.length; i++) {
+            Matcher tm = TAKSIT_SUBLINE_FULL.matcher(lines[i]);
+            if (!tm.find()) continue;
+
+            int current = Integer.parseInt(tm.group(2));
+            int total   = Integer.parseInt(tm.group(3));
+
+            // Bir üst satırı dene; tarih bulunamazsa iki üst satıra bak
+            // (TAKSİTLENDİRME FAİZİ satırı araya girebilir)
+            String prevLine = lines[i - 1].trim();
+            LocalDate date  = extractTurkishDate(prevLine);
+            if (date == null && i >= 2) {
+                prevLine = lines[i - 2].trim();
+                date     = extractTurkishDate(prevLine);
+            }
+            if (date == null) continue;
+
+            List<BigDecimal> amounts = extractTurkishAmounts(prevLine);
+            if (amounts.isEmpty()) continue;
+            BigDecimal txAmount = amounts.get(0); // ilk tutar = taksit ödemesi
+
+            // Eşleşen DTO'yu bul: aynı tarih + tutar
+            boolean found = false;
+            for (int j = 0; j < result.size(); j++) {
+                TransactionDto dto = result.get(j);
+                if (!dto.date().equals(date)) continue;
+                if (dto.amount().subtract(txAmount).abs().compareTo(new BigDecimal("0.05")) >= 0) continue;
+
+                // Taksit bilgisi yanlış veya eksik — her durumda üzerine yaz
+                result.set(j, new TransactionDto(
+                    dto.date(), dto.description(), dto.amount(),
+                    dto.category(), dto.currency(), dto.isSubscription(),
+                    true, current, total
+                ));
+                log.info("[taksit-fix] güncellendi {}/{} → {} | {} | {}TL",
+                    current, total, dto.date(), dto.description(), dto.amount());
+                enriched++;
+                found = true;
+                break;
+            }
+
+            // LLM bu işlemi tamamen kaçırdıysa sıfırdan DTO oluştur
+            if (!found) {
+                String description = extractDescriptionFromLine(prevLine);
+                result.add(new TransactionDto(
+                    date, description, txAmount, "Diğer", "TRY",
+                    false, true, current, total
+                ));
+                log.info("[taksit-fix] yeni DTO → {}/{} | {} | {} | {}TL",
+                    current, total, date, description, txAmount);
+                created++;
+            }
+        }
+
+        if (enriched > 0 || created > 0) {
+            log.info("[taksit-fix] tamamlandı — {} güncellendi, {} yeni DTO oluşturuldu.", enriched, created);
+        } else {
+            log.info("[taksit-fix] Kural tabanlı tarayıcı yeni taksit bulamadı " +
+                     "(LLM zaten tespit etmiş veya metinde 'taksidi' satırı yok).");
+        }
+        return result;
+    }
+
+    /**
+     * Satırdaki ilk Türkçe tarif formatını ("14 Ocak 2026") parse eder.
+     * Bulunamazsa {@code null} döner.
+     */
+    private LocalDate extractTurkishDate(String line) {
+        Matcher m = TURKISH_DATE_IN_LINE.matcher(line);
+        if (!m.find()) return null;
+        int day  = Integer.parseInt(m.group(1));
+        Integer month = TURKISH_MONTHS.get(m.group(2).toLowerCase(Locale.forLanguageTag("tr")));
+        if (month == null) return null;
+        int year = Integer.parseInt(m.group(3));
+        try { return LocalDate.of(year, month, day); } catch (Exception e) { return null; }
+    }
+
+    /**
+     * Taksit işlem satırından açıklama metni çıkarır.
+     * LLM'in tamamen atladığı işlemler için fallback açıklama üretir.
+     * Tarih, tutarlar, kalan taksit suffix'i, ülke kodu ve sonu puan değerlerini silerek
+     * mağaza/işyeri adını döner.
+     */
+    private String extractDescriptionFromLine(String line) {
+        String s = TURKISH_DATE_IN_LINE.matcher(line).replaceFirst("").trim();
+        s = TURKISH_AMOUNT_IN_LINE.matcher(s).replaceAll(" ").trim();
+        s = REMAINING_COUNT.matcher(s).replaceAll(" ").trim();
+        s = COUNTRY_CODE.matcher(s).replaceAll(" ").trim();
+        s = TRAILING_INT.matcher(s).replaceAll("").trim();
+        s = s.replaceAll("\\s{2,}", " ").trim();
+        return s.isEmpty() ? "Bilinmeyen" : s;
+    }
+
+    /**
+     * Satırdaki tüm Türk formatı tutarları ("412,53", "1.765,83") döner.
+     * Binlik noktalı formatı otomatik normalize eder.
+     */
+    private List<BigDecimal> extractTurkishAmounts(String line) {
+        Matcher m = TURKISH_AMOUNT_IN_LINE.matcher(line);
+        List<BigDecimal> amounts = new ArrayList<>();
+        while (m.find()) {
+            BigDecimal val = AmountNormalizer.normalize(m.group(1));
+            if (val != null && val.compareTo(BigDecimal.ZERO) > 0) {
+                amounts.add(val);
+            }
+        }
+        return amounts;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // JSON Onarıcı — truncated cevapları kurtarır
+    // ─────────────────────────────────────────────────────────────────────────
+
     String repairJson(String json) {
         String s = json.trim();
 

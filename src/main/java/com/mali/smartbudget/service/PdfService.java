@@ -42,6 +42,7 @@ public class PdfService {
 
         try (document) {
             PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setSortByPosition(true);
             String text = stripper.getText(document);
             log.info("PdfService: metin çıkarıldı. {} karakter.", text.length());
             return text;

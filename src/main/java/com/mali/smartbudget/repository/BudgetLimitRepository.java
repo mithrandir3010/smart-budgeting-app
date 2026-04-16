@@ -15,4 +15,6 @@ public interface BudgetLimitRepository extends JpaRepository<BudgetLimit, Long> 
     Optional<BudgetLimit> findByUserIdAndCategory(Long userId, String category);
 
     boolean existsByIdAndUserId(Long id, Long userId);
+
+    void deleteAllByUserId(Long userId);
 }

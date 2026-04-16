@@ -102,10 +102,12 @@ public final class PdfTextCleaner {
         text = EXCESS_SPACES .matcher(text).replaceAll(" ");
         text = MULTIPLE_BLANK.matcher(text).replaceAll("\n\n");
 
-        // Tek tek satırları filtrele: anlamsız kısa satırları at
+        // Tek tek satırları filtrele: anlamsız kısa satırları at.
+        // İstisna: "2/3", "1/6" gibi taksit fraksiyonu içeren satırları koru
+        // (bu formatlar bazı bankalarda ayrı satırda olabilir).
         text = Arrays.stream(text.split("\n"))
                 .map(String::trim)
-                .filter(line -> line.length() >= 4)   // 3 karakter altı satır: gürültü
+                .filter(line -> line.length() >= 4 || line.matches("\\d{1,2}/\\d{1,2}"))
                 .collect(Collectors.joining("\n"));
 
         text = text.trim();

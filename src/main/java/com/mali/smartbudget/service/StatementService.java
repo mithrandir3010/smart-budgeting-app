@@ -6,6 +6,7 @@ import com.mali.smartbudget.model.Statement;
 import com.mali.smartbudget.model.StatementStatus;
 import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.model.User;
+import com.mali.smartbudget.repository.BudgetLimitRepository;
 import com.mali.smartbudget.repository.StatementRepository;
 import com.mali.smartbudget.repository.UserRepository;
 import com.mali.smartbudget.util.ChecksumUtil;
@@ -47,10 +48,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class StatementService {
 
-    private final StatementRepository statementRepository;
-    private final UserRepository      userRepository;
-    private final ExtractionService   extractionService;
-    private final TransactionService  transactionService;
+    private final StatementRepository  statementRepository;
+    private final UserRepository       userRepository;
+    private final ExtractionService    extractionService;
+    private final TransactionService   transactionService;
+    private final BudgetLimitRepository budgetLimitRepository;
 
     /**
      * PDF ekstreyi işler: mükerrerlik kontrolü → ayıklama → dönem kontrolü → kayıt.
@@ -174,6 +176,7 @@ public class StatementService {
     public void deleteAllData(Long userId) {
         transactionService.deleteAllByUserId(userId);
         statementRepository.deleteAllByUserId(userId);
-        log.info("Tüm veriler silindi. userId={}", userId);
+        budgetLimitRepository.deleteAllByUserId(userId);
+        log.info("Tüm veriler silindi (transaction + statement + budget limits). userId={}", userId);
     }
 }

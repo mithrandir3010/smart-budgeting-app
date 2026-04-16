@@ -632,5 +632,134 @@ class ExtractionServiceTest {
                 .containsExactlyInAnyOrder("Migros", "Starbucks");
     }
 
+    // =========================================================================
+    // enrichWithInstallments — Hata 2, 3, 4 regresyon testleri
+    // =========================================================================
+
+    @Test
+    @DisplayName("Hata 3: LLM yanlış taksit (1/1) atamışsa post-processor doğru (3/3) ile üzerine yazar")
+    void enrichWithInstallments_wrongInstallmentByLlm_correctedByPostProcessor() throws IOException {
+        String pdfText = "14 Ocak 2026 TURKCELL 412,53\n1.237,60 TL'lik işlemin 3 / 3 taksidi\n";
+        String llmJson = """
+                [{"date":"2026-01-14","description":"Turkcell","amount":412.53,
+                  "category":"Fatura","currency":"TRY","isSubscription":false,
+                  "isInstallment":true,"currentInstallment":1,"totalInstallments":1}]
+                """;
+        when(pdfService.extractText(any())).thenReturn(pdfText);
+        doReturn(llmJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        assertThat(dtos).hasSize(1);
+        TransactionDto t = dtos.get(0);
+        assertThat(t.isInstallment()).isTrue();
+        assertThat(t.currentInstallment()).isEqualTo(3);
+        assertThat(t.totalInstallments()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("Hata 2: LLM transaction'ı tamamen atladıysa post-processor yeni DTO oluşturur")
+    void enrichWithInstallments_llmMissedTransaction_newDtoCreated() throws IOException {
+        String pdfText = """
+                14 Ocak 2026 TURKCELL 412,53
+                1.237,60 TL'lik işlemin 3 / 3 taksidi
+                """;
+        // LLM farklı bir işlem döndürdü, TURKCELL'i tamamen atladı
+        String llmJson = """
+                [{"date":"2026-04-01","description":"Migros","amount":250.00,
+                  "category":"Market","currency":"TRY","isSubscription":false,
+                  "isInstallment":false,"currentInstallment":null,"totalInstallments":null}]
+                """;
+        when(pdfService.extractText(any())).thenReturn(pdfText);
+        doReturn(llmJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        // Migros (LLM'den) + yeni TURKCELL taksit DTO'su (post-processor'dan)
+        assertThat(dtos).hasSize(2);
+        TransactionDto turkcell = dtos.stream()
+                .filter(TransactionDto::isInstallment)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Taksit DTO'su bulunamadı"));
+        assertThat(turkcell.date()).isEqualTo(LocalDate.of(2026, 1, 14));
+        assertThat(turkcell.amount()).isEqualByComparingTo("412.53");
+        assertThat(turkcell.currentInstallment()).isEqualTo(3);
+        assertThat(turkcell.totalInstallments()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("Hata 4: TAKSİTLENDİRME FAİZİ satırı i-1'e girince i-2 fallback devreye girer")
+    void enrichWithInstallments_faizLineBetween_i2FallbackWorks() throws IOException {
+        // FAİZİ satırı transaction ile taksidi satırı arasına sıkışmış
+        String pdfText = """
+                17 Mart 2026 TURKCELL 689,96 1.379,94 / 2
+                TAKSİTLENDİRME ISLEMI 87,45
+                2.069,90 TL'lik işlemin 1 / 3 taksidi
+                """;
+        String llmJson = """
+                [{"date":"2026-03-17","description":"Turkcell","amount":689.96,
+                  "category":"Fatura","currency":"TRY","isSubscription":false,
+                  "isInstallment":false,"currentInstallment":null,"totalInstallments":null}]
+                """;
+        when(pdfService.extractText(any())).thenReturn(pdfText);
+        doReturn(llmJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        assertThat(dtos).hasSize(1);
+        TransactionDto t = dtos.get(0);
+        assertThat(t.isInstallment()).isTrue();
+        assertThat(t.currentInstallment()).isEqualTo(1);
+        assertThat(t.totalInstallments()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("Gerçek Yapı Kredi formatı: LLM 1 transaction döndürdü, 2 taksit atladı → toplam 3 DTO")
+    void enrichWithInstallments_realYapiKrediFormat_missingInstallmentsCreated() throws IOException {
+        String pdfText = """
+                14 Ocak 2026 TURKCELL 412,53
+                1.237,60 TL'lik işlemin 3 / 3 taksidi
+                23 Ocak 2026 İYZİCO/ERCAN CANDAN İSTANBUL TR 400,00 1.200,00 / 3
+                2.400,00 TL'lik işlemin 3 / 6 taksidi
+                07 Mart 2026 TODTV.COM.TR ISTANBUL TR 179,00 1.969,00 / 11 215
+                2.148,00 TL'lik işlemin 1 / 12 taksidi
+                """;
+        // LLM sadece TODTV'yi yakaladı, TURKCELL ve İYZİCO'yu atladı
+        String llmJson = """
+                [{"date":"2026-03-07","description":"Todtv.com.tr","amount":179.00,
+                  "category":"Eğlence","currency":"TRY","isSubscription":false,
+                  "isInstallment":false,"currentInstallment":null,"totalInstallments":null}]
+                """;
+        when(pdfService.extractText(any())).thenReturn(pdfText);
+        doReturn(llmJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        // TODTV güncellendi + 2 yeni DTO (TURKCELL + İYZİCO)
+        assertThat(dtos).hasSize(3);
+
+        TransactionDto todtv = dtos.stream()
+                .filter(d -> d.description().toLowerCase().contains("todtv"))
+                .findFirst().orElseThrow();
+        assertThat(todtv.isInstallment()).isTrue();
+        assertThat(todtv.currentInstallment()).isEqualTo(1);
+        assertThat(todtv.totalInstallments()).isEqualTo(12);
+
+        TransactionDto turkcell = dtos.stream()
+                .filter(d -> "TURKCELL".equalsIgnoreCase(d.description()))
+                .findFirst().orElseThrow();
+        assertThat(turkcell.isInstallment()).isTrue();
+        assertThat(turkcell.currentInstallment()).isEqualTo(3);
+        assertThat(turkcell.totalInstallments()).isEqualTo(3);
+
+        TransactionDto iyzico = dtos.stream()
+                .filter(d -> d.description().toUpperCase().contains("İYZİCO")
+                          || d.description().toUpperCase().contains("IYZICO"))
+                .findFirst().orElseThrow();
+        assertThat(iyzico.isInstallment()).isTrue();
+        assertThat(iyzico.currentInstallment()).isEqualTo(3);
+        assertThat(iyzico.totalInstallments()).isEqualTo(6);
+    }
+
 }
 
