@@ -12,7 +12,7 @@ import BudgetGuard from '../components/BudgetGuard';
 import BudgetLimitModal from '../components/BudgetLimitModal';
 import InstallmentCard from '../components/InstallmentCard';
 import { useTheme } from '../context/ThemeContext';
-import { Sun, Moon, Upload, LogOut, ShieldAlert, Trash2, FileDown } from 'lucide-react';
+import { Sun, Moon, Upload, LogOut, ShieldAlert, Trash2, FileDown, UserCircle } from 'lucide-react';
 import { generateReport } from '../utils/pdfReport';
 
 const COLORS = [
@@ -242,6 +242,15 @@ export default function DashboardPage() {
             <Trash2 size={14} strokeWidth={2} />
             <span className="hidden sm:inline">Sıfırla</span>
           </button>
+
+          <Link
+            to="/profile"
+            className="flex items-center gap-1.5 text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100 border border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            title="Profil Ayarları"
+          >
+            <UserCircle size={14} strokeWidth={2} />
+            <span className="hidden sm:inline">Profil</span>
+          </Link>
 
           <button
             onClick={handleLogout}

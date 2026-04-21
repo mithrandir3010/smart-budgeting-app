@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import UploadPage from './pages/UploadPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import ProfilePage from './pages/ProfilePage';
 
 function PrivateRoute({ element }) {
   return isAuthenticated() ? element : <Navigate to="/login" replace />;
@@ -33,6 +34,7 @@ function App() {
           <Route path="/register" element={<PublicRoute element={<RegisterPage />} />} />
           <Route path="/"         element={<PrivateRoute element={<DashboardPage />} />} />
           <Route path="/upload"   element={<PrivateRoute element={<UploadPage />} />} />
+          <Route path="/profile"  element={<PrivateRoute element={<ProfilePage />} />} />
           <Route path="*"         element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

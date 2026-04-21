@@ -78,6 +78,15 @@ export const getBudgetAlerts = () =>
   client.get('/api/v1/budget-limits/alerts');
 
 // ── User Profile ──────────────────────────────────────────────────────────────
+export const getUserProfile = () =>
+  client.get('/api/v1/user/profile');
+
+export const updateProfile = (data) =>
+  client.put('/api/v1/user/profile', data);
+
+export const changePassword = (data) =>
+  client.put('/api/v1/user/change-password', data);
+
 export const updateMonthlyBudget = (amount) =>
   client.put('/api/v1/user/monthly-budget', { monthlyBudget: amount });
 
