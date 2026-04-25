@@ -26,10 +26,6 @@ jobs:
       # bu env var yalnızca main uygulama context'ini etkiler.
       DDL_AUTO: validate
 
-      # ExtractionService @PostConstruct doğrulamasını geçmek için sahte anahtar.
-      # Gerçek OpenAI çağrısı yapılmaz — ChatLanguageModel testlerde mock'lanır.
-      OPENAI_API_KEY: sk-ci-placeholder-no-real-calls
-
     steps:
       # ── 1. Kaynak kodu çek ──────────────────────────────────────────────────
       - name: Checkout source
@@ -55,13 +51,19 @@ jobs:
             ${{ runner.os }}-maven-
 
       # ── 4. Build + tüm testler ──────────────────────────────────────────────
-      - name: Build and run tests
+      # OPENAI_API_KEY: GitHub Secret tanımlıysa gerçek anahtar kullanılır;
+      # tanımlı değilse (|| operatörü) placeholder devreye girer.
+      # ChatLanguageModel testlerde mock'lanır — gerçek API çağrısı yapılmaz.
+      - name: Build with Maven
         run: |
           mvn clean verify \
             --batch-mode \
             --no-transfer-progress \
             -Dspring.profiles.active=test \
             -Dspring.jpa.hibernate.ddl-auto=${DDL_AUTO}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-ci-placeholder-no-real-calls' }}
+          SPRING_PROFILES_ACTIVE: test
 
       # ── 5. Test raporlarını artifact olarak yükle (sadece hata durumunda) ───
       - name: Upload Surefire test reports
