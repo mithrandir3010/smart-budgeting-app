@@ -59,8 +59,7 @@ jobs:
           mvn clean verify \
             --batch-mode \
             --no-transfer-progress \
-            -Dspring.profiles.active=test \
-            -Dspring.jpa.hibernate.ddl-auto=${DDL_AUTO}
+            -Dspring.profiles.active=test
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-ci-placeholder-no-real-calls' }}
           SPRING_PROFILES_ACTIVE: test
