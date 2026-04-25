@@ -3,6 +3,7 @@ package com.mali.smartbudget.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mali.smartbudget.dto.TransactionDto;
+import com.mali.smartbudget.model.Category;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -37,6 +38,7 @@ class ExtractionServiceTest {
 
     @Mock private ChatLanguageModel chatLanguageModel;
     @Mock private PdfService pdfService;
+    @Mock private CategorizationService categorizationService;
 
     @InjectMocks
     private ExtractionService extractionService;
@@ -52,6 +54,14 @@ class ExtractionServiceTest {
         dummyFile = new MockMultipartFile(
                 "file", "ekstre.pdf", "application/pdf", "PDF içeriği".getBytes()
         );
+
+        // Kategorileme tüm mevcut testlerde sabit OTHER döndürür — kategorileme mantığı
+        // CategorizationServiceTest'te ayrıca test edilir.
+        org.mockito.Mockito.lenient()
+                .when(categorizationService.categorize(
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any()))
+                .thenReturn(Category.OTHER);
     }
 
     // =========================================================================

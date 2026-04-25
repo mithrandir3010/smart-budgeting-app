@@ -106,6 +106,12 @@
             <version>3.0.0</version>
         </dependency>
 
+        <!-- Actuator — health, metrics, info endpoint'leri -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

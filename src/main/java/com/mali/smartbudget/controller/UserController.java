@@ -23,6 +23,7 @@ public class UserController {
 
     @GetMapping("/profile")
     public ResponseEntity<UserProfileDto> getProfile(@AuthenticationPrincipal User currentUser) {
+        log.info("Profil bilgisi istendi. userId={}, username={}", currentUser.getId(), currentUser.getUsername());
         return ResponseEntity.ok(userService.getCurrentUserProfile(currentUser));
     }
 
@@ -30,14 +31,19 @@ public class UserController {
     public ResponseEntity<UserProfileDto> updateProfile(
             @AuthenticationPrincipal User currentUser,
             @Valid @RequestBody UpdateProfileRequest request) {
-        return ResponseEntity.ok(userService.updateUserProfile(currentUser, request));
+        log.info("Profil güncelleme isteği. userId={}, yeni email={}", currentUser.getId(), request.email());
+        UserProfileDto updated = userService.updateUserProfile(currentUser, request);
+        log.info("Profil güncellendi. userId={}", currentUser.getId());
+        return ResponseEntity.ok(updated);
     }
 
     @PutMapping("/change-password")
     public ResponseEntity<Void> changePassword(
             @AuthenticationPrincipal User currentUser,
             @Valid @RequestBody ChangePasswordRequest request) {
+        log.info("Şifre değişikliği isteği. userId={}, username={}", currentUser.getId(), currentUser.getUsername());
         userService.changePassword(currentUser, request);
+        log.info("Şifre başarıyla değiştirildi. userId={}", currentUser.getId());
         return ResponseEntity.noContent().build();
     }
 

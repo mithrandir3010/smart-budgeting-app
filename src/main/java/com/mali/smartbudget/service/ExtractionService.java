@@ -14,6 +14,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.util.StopWatch;
+
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -231,6 +233,7 @@ public class ExtractionService {
     private final ChatLanguageModel chatLanguageModel;
     private final PdfService pdfService;
     private final ObjectMapper objectMapper;
+    private final CategorizationService categorizationService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Başlangıç doğrulaması
@@ -309,8 +312,12 @@ public class ExtractionService {
         log.info("[2/4] LLM isteği gönderiliyor... (~{} tahmini token)",
                 prompt.length() / 4);
 
+        StopWatch llmSw = new StopWatch();
+        llmSw.start();
         String jsonResponse = chatLanguageModel.generate(prompt);
-        log.info("[2/4] LLM yanıtı alındı. {} karakter", jsonResponse.length());
+        llmSw.stop();
+        log.info("[2/4] LLM yanıtı alındı. {} karakter | LLM süresi={}ms",
+                jsonResponse.length(), llmSw.getTotalTimeMillis());
 
         // LLM cevabının tamamını logla (production'da DEBUG seviyesine çek)
         log.debug("[2/4] LLM ham yanıt:\n{}", jsonResponse);
@@ -336,6 +343,8 @@ public class ExtractionService {
      */
     public List<TransactionDto> extractDtos(MultipartFile file) throws IOException {
 
+        StopWatch pipelineSw = new StopWatch("ExtractionPipeline");
+        pipelineSw.start("full-pipeline");
         log.info("[2/4] JSON ayıklama başlıyor...");
         String rawLlmJson = extractTransactionsAsJson(file);
 
@@ -388,6 +397,20 @@ public class ExtractionService {
             log.warn("[4/4] Post-processor başarısız, atlanıyor: {}", e.getMessage());
         }
 
+        // ── Kategorizasyon: her DTO'ya enum kategori ata ─────────────────────
+        dtos = dtos.stream()
+                .map(dto -> new com.mali.smartbudget.dto.TransactionDto(
+                        dto.date(), dto.description(), dto.amount(),
+                        dto.category(), dto.currency(), dto.isSubscription(),
+                        dto.isInstallment(), dto.currentInstallment(), dto.totalInstallments(),
+                        categorizationService.categorize(dto.description(), dto.category())
+                ))
+                .toList();
+        log.info("[kategorileme] {} DTO kategorize edildi.", dtos.size());
+
+        pipelineSw.stop();
+        log.info("[pipeline] Extraction tamamlandı. {} DTO | toplam süre={}ms",
+                dtos.size(), pipelineSw.getTotalTimeMillis());
         return dtos;
     }
 
@@ -523,7 +546,7 @@ public class ExtractionService {
         }
 
         return new TransactionDto(date, description, amount, category, currency,
-                isSubscription, isInstallment, currentInstallment, totalInstallments);
+                isSubscription, isInstallment, currentInstallment, totalInstallments, null);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -636,7 +659,7 @@ public class ExtractionService {
                 result.set(j, new TransactionDto(
                     dto.date(), dto.description(), dto.amount(),
                     dto.category(), dto.currency(), dto.isSubscription(),
-                    true, current, total
+                    true, current, total, dto.categoryEnum()
                 ));
                 log.info("[taksit-fix] güncellendi {}/{} → {} | {} | {}TL",
                     current, total, dto.date(), dto.description(), dto.amount());
@@ -650,7 +673,7 @@ public class ExtractionService {
                 String description = extractDescriptionFromLine(prevLine);
                 result.add(new TransactionDto(
                     date, description, txAmount, "Diğer", "TRY",
-                    false, true, current, total
+                    false, true, current, total, null
                 ));
                 log.info("[taksit-fix] yeni DTO → {}/{} | {} | {} | {}TL",
                     current, total, date, description, txAmount);

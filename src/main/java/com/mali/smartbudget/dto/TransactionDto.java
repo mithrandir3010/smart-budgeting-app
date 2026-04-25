@@ -2,6 +2,7 @@ package com.mali.smartbudget.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.mali.smartbudget.model.Category;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,6 +22,8 @@ public record TransactionDto(
 
         String description,
         BigDecimal amount,
+
+        /** LLM'in atadığı Türkçe kategori (analytics ve bütçe limitleri için korunur). */
         String category,
         String currency,
 
@@ -31,5 +34,8 @@ public record TransactionDto(
         boolean isInstallment,
 
         Integer currentInstallment,
-        Integer totalInstallments
+        Integer totalInstallments,
+
+        /** Üst-seviye enum kategori — frontend ikonları ve raporlama için. */
+        Category categoryEnum
 ) {}

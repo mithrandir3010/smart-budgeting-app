@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Spring Boot'un ANSI renk dönüştürücüleri -->
+    <conversionRule conversionWord="clr"
+        converterClass="org.springframework.boot.logging.logback.ColorConverter"/>
+    <conversionRule conversionWord="wEx"
+        converterClass="org.springframework.boot.logging.logback.ExtendedWhitespaceThrowableProxyConverter"/>
+
+    <!-- ── Konsol çıktısı (renkli, geliştirici dostu) ──────────────────────── -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p){highlight} %clr(${PID:- }){magenta} %clr(---){faint} %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ── Dosya çıktısı (ELK / log aggregator için düz metin) ─────────────── -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/smart-budget.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <!-- Günlük rotasyon — 30 gün sakla, toplam 500MB'ı geçme -->
+            <fileNamePattern>logs/smart-budget-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <!-- ELK'e uygun düz format: timestamp level [thread] logger - message -->
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ── Uygulama paketi log seviyeleri ───────────────────────────────────── -->
+    <logger name="com.mali.smartbudget"         level="INFO"/>
+    <logger name="com.mali.smartbudget.mcp"     level="DEBUG"/>
+    <!-- Kritik servis performans logları DEBUG'da da görünsün -->
+    <logger name="com.mali.smartbudget.service.ExtractionService" level="DEBUG"/>
+    <logger name="com.mali.smartbudget.service.StatementService"  level="DEBUG"/>
+
+    <!-- Spring ve Hibernate gürültüsünü kısalt -->
+    <logger name="org.springframework.security"            level="WARN"/>
+    <logger name="org.springframework.web"                 level="WARN"/>
+    <logger name="io.modelcontextprotocol"                 level="INFO"/>
+    <logger name="org.hibernate.SQL"                       level="DEBUG"/>
+    <logger name="org.hibernate.type.descriptor.sql"       level="WARN"/>
+
+    <!-- ── Root logger ──────────────────────────────────────────────────────── -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+</configuration>

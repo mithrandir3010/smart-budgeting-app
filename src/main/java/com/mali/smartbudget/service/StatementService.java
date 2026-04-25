@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StopWatch;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -67,6 +68,9 @@ public class StatementService {
      */
     @Transactional
     public String processUpload(MultipartFile file, Long userId, String fileName) throws IOException {
+
+        StopWatch uploadSw = new StopWatch("processUpload");
+        uploadSw.start("total");
 
         // ── Adım 1: SHA-256 ───────────────────────────────────────────────────
         byte[] bytes    = file.getBytes();
@@ -134,6 +138,7 @@ public class StatementService {
                         .description(dto.description())
                         .amount(dto.amount())
                         .category(dto.category())
+                        .categoryEnum(dto.categoryEnum())
                         .currency(dto.currency())
                         .isSubscription(dto.isSubscription())
                         .isInstallment(dto.isInstallment())
@@ -157,6 +162,10 @@ public class StatementService {
         log.info("[Upload 6/6] Statement kaydedildi. id={}", statement.getId());
 
         // ── Başarı mesajı ─────────────────────────────────────────────────────
+        uploadSw.stop();
+        log.info("[Upload] Tamamlandı. userId={}, dosya='{}', {} işlem | toplam süre={}ms",
+                userId, fileName, saved.size(), uploadSw.getTotalTimeMillis());
+
         String msg = "%d işlem başarıyla işlendi".formatted(saved.size());
         if (periodStart.isPresent()) {
             msg += " (%s – %s dönemi)".formatted(periodStart.get(), periodEnd.get());

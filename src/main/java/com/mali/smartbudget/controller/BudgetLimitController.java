@@ -29,6 +29,7 @@ public class BudgetLimitController {
     /** Kullanıcının tüm bütçe limitlerini döner. */
     @GetMapping
     public ResponseEntity<List<BudgetLimit>> getAll(@AuthenticationPrincipal User user) {
+        log.debug("Bütçe limitleri istendi. userId={}", user.getId());
         return ResponseEntity.ok(budgetLimitService.getByUser(user.getId()));
     }
 
@@ -41,6 +42,8 @@ public class BudgetLimitController {
             @AuthenticationPrincipal User user,
             @Valid @RequestBody BudgetLimitRequest request) {
 
+        log.info("Bütçe limiti upsert isteği. userId={}, kategori={}, tutar={}",
+                user.getId(), request.category(), request.limitAmount());
         BudgetLimit saved = budgetLimitService.upsert(user, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
@@ -51,7 +54,9 @@ public class BudgetLimitController {
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
 
+        log.info("Bütçe limiti silme isteği. userId={}, limitId={}", user.getId(), id);
         budgetLimitService.delete(id, user.getId());
+        log.info("Bütçe limiti silindi. userId={}, limitId={}", user.getId(), id);
         return ResponseEntity.noContent().build();
     }
 
@@ -61,9 +66,11 @@ public class BudgetLimitController {
      */
     @GetMapping("/alerts")
     public ResponseEntity<List<BudgetAlertDto>> getAlerts(@AuthenticationPrincipal User user) {
+        log.info("Bütçe uyarıları istendi. userId={}", user.getId());
         Map<String, java.math.BigDecimal> breakdown =
                 analyticsService.getSummary(user.getId()).categoryBreakdown();
         List<BudgetAlertDto> alerts = budgetLimitService.computeAlerts(user.getId(), breakdown);
+        log.info("Bütçe uyarıları hesaplandı. userId={}, uyarı sayısı={}", user.getId(), alerts.size());
         return ResponseEntity.ok(alerts);
     }
 }

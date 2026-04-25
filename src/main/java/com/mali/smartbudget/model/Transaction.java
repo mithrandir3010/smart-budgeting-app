@@ -39,6 +39,10 @@ public class Transaction {
 
     private String category;
 
+    /** Üst-seviye enum kategori — {@code CategorizationService} tarafından atanır. */
+    @Enumerated(EnumType.STRING)
+    private Category categoryEnum;
+
     @Column(length = 3)
     private String currency;
 
