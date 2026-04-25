@@ -1,0 +1,90 @@
+name: CI — Build & Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Aynı branch'e arka arkaya push yapıldığında önceki çalışmayı iptal et
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (Java 17)
+    runs-on: ubuntu-latest
+
+    env:
+      # Testler H2 in-memory kullanır — PostgreSQL servisi gerekmez.
+      # application-test.properties otomatik yüklenir.
+      SPRING_PROFILES_ACTIVE: test
+
+      # CI'da schema değişikliklerinden korunmak için validate modu.
+      # Testler application-test.properties'deki create-drop'u kullanır;
+      # bu env var yalnızca main uygulama context'ini etkiler.
+      DDL_AUTO: validate
+
+      # ExtractionService @PostConstruct doğrulamasını geçmek için sahte anahtar.
+      # Gerçek OpenAI çağrısı yapılmaz — ChatLanguageModel testlerde mock'lanır.
+      OPENAI_API_KEY: sk-ci-placeholder-no-real-calls
+
+    steps:
+      # ── 1. Kaynak kodu çek ──────────────────────────────────────────────────
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # ── 2. JDK 17 (Eclipse Temurin) ─────────────────────────────────────────
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'          # setup-java built-in Maven cache (pom.xml hash)
+
+      # ── 3. Maven bağımlılık cache'i ─────────────────────────────────────────
+      # setup-java'nın cache özelliği ~/.m2/repository'i otomatik cache'ler.
+      # Aşağıdaki adım ek anahtar katmanı ekler (multi-module projelerde faydalı).
+      - name: Cache Maven local repo
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      # ── 4. Build + tüm testler ──────────────────────────────────────────────
+      - name: Build and run tests
+        run: |
+          mvn clean verify \
+            --batch-mode \
+            --no-transfer-progress \
+            -Dspring.profiles.active=test \
+            -Dspring.jpa.hibernate.ddl-auto=${DDL_AUTO}
+
+      # ── 5. Test raporlarını artifact olarak yükle (sadece hata durumunda) ───
+      - name: Upload Surefire test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_number }}
+          path: target/surefire-reports/
+          retention-days: 7
+
+      # ── 6. Test özeti (GitHub Actions Summary) ──────────────────────────────
+      - name: Test summary
+        if: always()
+        run: |
+          echo "## Test Sonuçları" >> $GITHUB_STEP_SUMMARY
+          if [ -f target/surefire-reports/*.xml ]; then
+            TESTS=$(grep -h 'tests=' target/surefire-reports/*.xml | \
+              grep -oP 'tests="\K[0-9]+' | awk '{s+=$1} END {print s}')
+            FAILS=$(grep -h 'failures=' target/surefire-reports/*.xml | \
+              grep -oP 'failures="\K[0-9]+' | awk '{s+=$1} END {print s}')
+            echo "| Toplam | Başarısız |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-----------|" >> $GITHUB_STEP_SUMMARY
+            echo "| $TESTS | $FAILS    |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Test raporu bulunamadı." >> $GITHUB_STEP_SUMMARY
+          fi
