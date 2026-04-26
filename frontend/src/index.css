@@ -5,6 +5,7 @@
 @layer base {
   :root {
     color-scheme: light;
+    --sidebar-w: 240px;
   }
 
   .dark {
@@ -15,12 +16,16 @@
     box-sizing: border-box;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     margin: 0;
     font-family: 'Inter', system-ui, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    @apply bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100;
+    @apply bg-zinc-50 dark:bg-[#050507] text-zinc-900 dark:text-zinc-100;
   }
 
   #root {
@@ -29,11 +34,80 @@
 }
 
 @layer utilities {
+  /* ── Glass Card ─────────────────────────── */
+  .glass-card {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+    border-radius: 1rem;
+  }
+
+  .dark .glass-card {
+    background: rgba(18, 18, 26, 0.75);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 4px 32px rgba(0, 0, 0, 0.5);
+    border-radius: 1rem;
+  }
+
+  /* ── Glass Sidebar ──────────────────────── */
+  .glass-sidebar {
+    background: rgba(245, 245, 250, 0.92);
+    border-right: 1px solid rgba(0, 0, 0, 0.07);
+  }
+
+  .dark .glass-sidebar {
+    background: rgba(10, 10, 16, 0.88);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  /* ── Gradient mesh background (dark) ───── */
+  .mesh-bg {
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 10%, rgba(16, 185, 129, 0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 80% 80%, rgba(99, 102, 241, 0.06) 0%, transparent 60%),
+      #050507;
+  }
+
+  /* ── Neon text glows ────────────────────── */
+  .text-neon-green {
+    color: #34d399;
+    text-shadow: 0 0 20px rgba(52, 211, 153, 0.55);
+  }
+  .text-neon-amber {
+    color: #fbbf24;
+    text-shadow: 0 0 20px rgba(251, 191, 36, 0.55);
+  }
+  .text-neon-rose {
+    color: #fb7185;
+    text-shadow: 0 0 18px rgba(251, 113, 133, 0.5);
+  }
+
+  /* ── Dot pulse ──────────────────────────── */
+  .dot-pulse {
+    @apply w-2 h-2 rounded-full;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  /* ── Legacy ─────────────────────────────── */
   .glass {
     @apply bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm;
   }
 
   .card-base {
-    @apply bg-white dark:bg-zinc-900 rounded-xl border border-zinc-100 dark:border-zinc-800 shadow-sm;
+    @apply bg-white dark:bg-zinc-900/80 rounded-2xl border border-zinc-100 dark:border-white/[0.07] shadow-sm;
   }
+
+  /* ── Gradient radial ────────────────────── */
+  .bg-gradient-radial {
+    background-image: radial-gradient(var(--tw-gradient-stops));
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%       { transform: scale(1.4); opacity: 0.7; }
 }
