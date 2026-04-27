@@ -9,6 +9,7 @@ import com.mali.smartbudget.repository.UserRepository;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -31,26 +32,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/**
- * JWT Filtre Zinciri ve Çok-Kullanıcı Veri İzolasyonu — Integration Testleri.
- *
- * <p><b>Kapsam:</b>
- * <ul>
- *   <li>Token olmadan korumalı endpoint'ler → 401 (Spring Security filtresi)</li>
- *   <li>/api/v1/auth/** public → token olmadan 2xx/uygulama katmanı hatası</li>
- *   <li>Geçerli JWT → 200 OK</li>
- *   <li>Malformed / süresi dolmuş / prefix'siz token → 401</li>
- *   <li>Veri izolasyonu: Kullanıcı A'nın verisi Kullanıcı B'ye görünmez</li>
- * </ul>
- *
- * <p><b>Altyapı:</b> H2 in-memory (test profili), {@code serena.extraction.mock=true}.
- * Uygulama konteksti tüm testler arasında paylaşılır; her testten sonra {@code @AfterEach}
- * ile veriler silinir.
- */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@DisplayName("Security — JWT Filtre ve Data Isolation Integration Testleri")
+@DisplayName("Security — JWT Cookie ve Data Isolation Integration Testleri")
 class SecurityIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
@@ -62,7 +47,6 @@ class SecurityIntegrationTest {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    // ── Her testten sonra tüm veriyi temizle ──────────────────────────────────
     @AfterEach
     void cleanUp() {
         transactionRepository.deleteAll();
@@ -71,37 +55,37 @@ class SecurityIntegrationTest {
     }
 
     // =========================================================================
-    // Token olmadan korumalı endpoint'ler → 401
+    // Cookie yok → 401
     // =========================================================================
 
     @Nested
-    @DisplayName("Token Yok → 401 Unauthorized")
+    @DisplayName("Cookie Yok → 401 Unauthorized")
     class NoTokenUnauthorized {
 
         @Test
-        @DisplayName("GET /analytics/summary — token yok → 401")
-        void analyticsSummary_noToken_returns401() throws Exception {
+        @DisplayName("GET /analytics/summary — cookie yok → 401")
+        void analyticsSummary_noCookie_returns401() throws Exception {
             mockMvc.perform(get("/api/v1/analytics/summary"))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("GET /analytics/transactions — token yok → 401")
-        void analyticsTransactions_noToken_returns401() throws Exception {
+        @DisplayName("GET /analytics/transactions — cookie yok → 401")
+        void analyticsTransactions_noCookie_returns401() throws Exception {
             mockMvc.perform(get("/api/v1/analytics/transactions"))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("GET /analytics/subscriptions — token yok → 401")
-        void analyticsSubscriptions_noToken_returns401() throws Exception {
+        @DisplayName("GET /analytics/subscriptions — cookie yok → 401")
+        void analyticsSubscriptions_noCookie_returns401() throws Exception {
             mockMvc.perform(get("/api/v1/analytics/subscriptions"))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("POST /statements/upload — token yok → 401")
-        void statementsUpload_noToken_returns401() throws Exception {
+        @DisplayName("POST /statements/upload — cookie yok → 401")
+        void statementsUpload_noCookie_returns401() throws Exception {
             MockMultipartFile file = new MockMultipartFile(
                     "file", "test.pdf", "application/pdf", "PDF".getBytes());
             mockMvc.perform(multipart("/api/v1/statements/upload").file(file))
@@ -110,7 +94,7 @@ class SecurityIntegrationTest {
     }
 
     // =========================================================================
-    // Auth endpoint'ler public — Spring Security filtresi geçmeli
+    // Auth endpoint'ler public
     // =========================================================================
 
     @Nested
@@ -118,21 +102,20 @@ class SecurityIntegrationTest {
     class AuthEndpointsPublic {
 
         @Test
-        @DisplayName("POST /auth/register — tokensuz erişilebilir → 201 Created")
-        void register_noToken_accessible_returns201() throws Exception {
+        @DisplayName("POST /auth/register — tokensuz erişilebilir → 201 + Set-Cookie header içerir")
+        void register_noCookie_accessible_returns201WithCookie() throws Exception {
             mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(registerBody("pub_reg_user")))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.token").isNotEmpty())
-                    .andExpect(jsonPath("$.username").value("pub_reg_user"));
+                    .andExpect(cookie().exists("jwt_token"))
+                    .andExpect(jsonPath("$.username").value("pub_reg_user"))
+                    .andExpect(jsonPath("$.token").doesNotExist());
         }
 
         @Test
-        @DisplayName("POST /auth/login — tokensuz erişilebilir; hata Spring Security'den değil uygulama katmanından gelir")
-        void login_noToken_accessible_badCredentials401FromAppLayer() throws Exception {
-            // Spring Security filtresi geçmeli → GlobalExceptionHandler 401 dönmeli
-            // Fark: GlobalExceptionHandler'ın yanıtında "message" alanı var
+        @DisplayName("POST /auth/login — hatalı kimlik bilgisi → uygulama katmanı 401 (mesaj içerir)")
+        void login_noCookie_badCredentials_returns401FromAppLayer() throws Exception {
             MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
@@ -141,45 +124,44 @@ class SecurityIntegrationTest {
                     .andExpect(status().isUnauthorized())
                     .andReturn();
 
-            // Spring Security'nin bare 401'ü değil, uygulamamızın JSON 401'ü
             assertThat(result.getResponse().getContentAsString()).contains("message");
         }
 
         @Test
-        @DisplayName("POST /auth/login — geçerli kullanıcı ile tokensuz giriş → 200 OK + JWT döner")
-        void login_noToken_validCredentials_returns200WithJwt() throws Exception {
-            // Önce kullanıcı kaydet
+        @DisplayName("POST /auth/login — geçerli kullanıcı → 200 + HttpOnly cookie set edilir")
+        void login_noCookie_validCredentials_returns200WithCookie() throws Exception {
             mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(registerBody("login_test_user")))
                     .andExpect(status().isCreated());
 
-            // Tokensuz login → 200
             mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {"username":"login_test_user","password":"Test1234!"}
                                     """))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.token").isNotEmpty());
+                    .andExpect(cookie().exists("jwt_token"))
+                    .andExpect(cookie().httpOnly("jwt_token", true))
+                    .andExpect(jsonPath("$.token").doesNotExist());
         }
     }
 
     // =========================================================================
-    // Geçerli token → 200 OK
+    // Geçerli cookie → 200 OK
     // =========================================================================
 
     @Nested
-    @DisplayName("Geçerli Token → 200 OK")
-    class ValidTokenOk {
+    @DisplayName("Geçerli Cookie → 200 OK")
+    class ValidCookieOk {
 
         @Test
-        @DisplayName("Geçerli JWT ile /analytics/summary → 200, yanıt alanları mevcut")
-        void validToken_analyticsSummary_returns200WithFields() throws Exception {
+        @DisplayName("Geçerli JWT cookie ile /analytics/summary → 200, yanıt alanları mevcut")
+        void validCookie_analyticsSummary_returns200WithFields() throws Exception {
             String token = registerAndGetToken("valid_usr_1");
 
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .header("Authorization", "Bearer " + token))
+                            .cookie(new Cookie("jwt_token", token)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalSpending").exists())
                     .andExpect(jsonPath("$.projectedSpending").exists())
@@ -187,76 +169,77 @@ class SecurityIntegrationTest {
         }
 
         @Test
-        @DisplayName("Geçerli JWT ile /analytics/transactions → 200, dizi döner")
-        void validToken_analyticsTransactions_returns200WithArray() throws Exception {
+        @DisplayName("Geçerli JWT cookie ile /analytics/transactions → 200, dizi döner")
+        void validCookie_analyticsTransactions_returns200WithArray() throws Exception {
             String token = registerAndGetToken("valid_usr_2");
 
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .header("Authorization", "Bearer " + token))
+                            .cookie(new Cookie("jwt_token", token)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray());
         }
 
         @Test
-        @DisplayName("Geçerli JWT ile /analytics/subscriptions → 200")
-        void validToken_analyticsSubscriptions_returns200() throws Exception {
+        @DisplayName("Geçerli JWT cookie ile /analytics/subscriptions → 200")
+        void validCookie_analyticsSubscriptions_returns200() throws Exception {
             String token = registerAndGetToken("valid_usr_3");
 
             mockMvc.perform(get("/api/v1/analytics/subscriptions")
-                            .header("Authorization", "Bearer " + token))
+                            .cookie(new Cookie("jwt_token", token)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray());
         }
     }
 
     // =========================================================================
-    // Geçersiz / bozuk / süresi dolmuş token → 401
+    // Geçersiz / bozuk / süresi dolmuş cookie → 401
     // =========================================================================
 
     @Nested
-    @DisplayName("Geçersiz Token → 401")
-    class InvalidTokenUnauthorized {
+    @DisplayName("Geçersiz Cookie → 401")
+    class InvalidCookieUnauthorized {
 
         @Test
-        @DisplayName("Tamamen sahte (malformed) JWT → 401")
-        void malformedToken_returns401() throws Exception {
+        @DisplayName("Tamamen sahte (malformed) JWT cookie → 401")
+        void malformedCookieToken_returns401() throws Exception {
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .header("Authorization", "Bearer this.is.not.a.real.jwt"))
+                            .cookie(new Cookie("jwt_token", "this.is.not.a.real.jwt")))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("Süresi dolmuş JWT → 401")
-        void expiredToken_returns401() throws Exception {
+        @DisplayName("Süresi dolmuş JWT cookie → 401")
+        void expiredCookieToken_returns401() throws Exception {
             String expired = buildExpiredToken("expired_usr");
 
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .header("Authorization", "Bearer " + expired))
+                            .cookie(new Cookie("jwt_token", expired)))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("'Bearer ' prefix'i olmayan token → filtre görmez → 401")
-        void tokenWithoutBearerPrefix_returns401() throws Exception {
-            String token = registerAndGetToken("bare_token_usr");
+        @DisplayName("Geçerli token Authorization header'da (cookie yok) → filtre görmez → 401")
+        void validTokenInAuthHeader_noCookie_returns401() throws Exception {
+            String token = registerAndGetToken("bearer_usr");
 
-            // Geçerli bir token ama "Bearer " prefix'i yok → JwtAuthenticationFilter atlar
+            // Token geçerli ama cookie yerine Authorization header'da — filtre artık oraya bakmıyor
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .header("Authorization", token))
+                            .header("Authorization", "Bearer " + token))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("Rastgele base64 string (geçersiz imza) → 401")
-        void randomBase64Token_invalidSignature_returns401() throws Exception {
+        @DisplayName("Rastgele base64 cookie (geçersiz imza) → 401")
+        void randomBase64Cookie_invalidSignature_returns401() throws Exception {
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJoYWNrZXIifQ.INVALID_SIGNATURE"))
+                            .cookie(new Cookie("jwt_token",
+                                    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJoYWNrZXIifQ.INVALID_SIGNATURE")))
                     .andExpect(status().isUnauthorized());
         }
     }
 
     // =========================================================================
-    // Veri İzolasyonu — Her kullanıcı yalnızca kendi verisini görür
+    // Veri İzolasyonu
     // =========================================================================
 
     @Nested
@@ -266,25 +249,21 @@ class SecurityIntegrationTest {
         @Test
         @DisplayName("User B, User A'nın işlem listesini göremez")
         void userBCannotSeeUserATransactions() throws Exception {
-            // User A kayıt + işlemleri seed et
             String tokenA = registerAndGetToken("iso_userA");
             User userA = userRepository.findByUsername("iso_userA").orElseThrow();
             transactionRepository.save(buildTx(userA, "Migros", "500.00", "Market", false));
             transactionRepository.save(buildTx(userA, "Netflix", "79.99", "Eğlence", true));
 
-            // User B kayıt — hiç işlemi yok
             String tokenB = registerAndGetToken("iso_userB");
 
-            // User B'nin işlemleri boş olmalı
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .header("Authorization", "Bearer " + tokenB))
+                            .cookie(new Cookie("jwt_token", tokenB)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray())
                     .andExpect(jsonPath("$").isEmpty());
 
-            // User A kendi 2 işlemini görür
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .header("Authorization", "Bearer " + tokenA))
+                            .cookie(new Cookie("jwt_token", tokenA)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2))
                     .andExpect(jsonPath("$[0].description").value("Migros"));
@@ -293,30 +272,26 @@ class SecurityIntegrationTest {
         @Test
         @DisplayName("User B'nin toplam harcaması sıfır — User A'nın verisi izole")
         void userBSummaryIsZeroWhenUserAHasData() throws Exception {
-            // User A'ya yüksek harcama ekle
             String tokenA = registerAndGetToken("sum_userA");
             User userA = userRepository.findByUsername("sum_userA").orElseThrow();
             transactionRepository.save(buildTx(userA, "Kira", "12000.00", "Kira", false));
             transactionRepository.save(buildTx(userA, "Market", "1500.00", "Market", false));
 
-            // User B kayıt
             String tokenB = registerAndGetToken("sum_userB");
 
-            // User B'nin toplam harcaması sıfır
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .header("Authorization", "Bearer " + tokenB))
+                            .cookie(new Cookie("jwt_token", tokenB)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalSpending").value(0));
 
-            // User A kendi toplamını görür (12000 + 1500 = 13500)
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .header("Authorization", "Bearer " + tokenA))
+                            .cookie(new Cookie("jwt_token", tokenA)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalSpending").value(13500.00));
         }
 
         @Test
-        @DisplayName("Abonelik listesi kullanıcı bazlı izole — User B abonelikleri göremez")
+        @DisplayName("Abonelik listesi kullanıcı bazlı izole")
         void subscriptionsScopedToUser() throws Exception {
             String tokenA = registerAndGetToken("sub_userA");
             User userA = userRepository.findByUsername("sub_userA").orElseThrow();
@@ -325,21 +300,19 @@ class SecurityIntegrationTest {
 
             String tokenB = registerAndGetToken("sub_userB");
 
-            // User B abonelik listesi boş
             mockMvc.perform(get("/api/v1/analytics/subscriptions")
-                            .header("Authorization", "Bearer " + tokenB))
+                            .cookie(new Cookie("jwt_token", tokenB)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isEmpty());
 
-            // User A 2 abonelik görür
             mockMvc.perform(get("/api/v1/analytics/subscriptions")
-                            .header("Authorization", "Bearer " + tokenA))
+                            .cookie(new Cookie("jwt_token", tokenA)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2));
         }
 
         @Test
-        @DisplayName("Üçüncü kullanıcı kendi verisini diğerlerinden bağımsız yönetir")
+        @DisplayName("Üç kullanıcı birbirinden bağımsız veri görür")
         void threeUsers_eachSeesOnlyOwnData() throws Exception {
             String tokenA = registerAndGetToken("three_userA");
             String tokenB = registerAndGetToken("three_userB");
@@ -352,20 +325,17 @@ class SecurityIntegrationTest {
             transactionRepository.save(buildTx(userC, "C-Kira", "5000.00", "Kira", false));
             transactionRepository.save(buildTx(userC, "C-Market", "200.00", "Market", false));
 
-            // User B — hiç işlem yok → boş liste
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .header("Authorization", "Bearer " + tokenB))
+                            .cookie(new Cookie("jwt_token", tokenB)))
                     .andExpect(jsonPath("$").isEmpty());
 
-            // User A — 1 işlem
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .header("Authorization", "Bearer " + tokenA))
+                            .cookie(new Cookie("jwt_token", tokenA)))
                     .andExpect(jsonPath("$.length()").value(1))
                     .andExpect(jsonPath("$[0].description").value("A-Migros"));
 
-            // User C — 2 işlem
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .header("Authorization", "Bearer " + tokenC))
+                            .cookie(new Cookie("jwt_token", tokenC)))
                     .andExpect(jsonPath("$.length()").value(2));
         }
     }
@@ -374,10 +344,6 @@ class SecurityIntegrationTest {
     // Yardımcı metodlar
     // =========================================================================
 
-    /**
-     * Verilen kullanıcı adıyla register endpoint'ine POST atar ve JWT token döner.
-     * Şifre sabit: {@code Test1234!}
-     */
     private String registerAndGetToken(String username) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -385,8 +351,7 @@ class SecurityIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        return objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("token").asText();
+        return result.getResponse().getCookie("jwt_token").getValue();
     }
 
     private String registerBody(String username) {
@@ -408,16 +373,12 @@ class SecurityIntegrationTest {
                 .build();
     }
 
-    /**
-     * Test amaçlı süresi dolmuş JWT üretir.
-     * Aynı secret key kullanılır — imza geçerlidir fakat token expired'dır.
-     */
     private String buildExpiredToken(String username) {
         byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
         return Jwts.builder()
                 .subject(username)
-                .issuedAt(new Date(System.currentTimeMillis() - 7_200_000L))    // 2 saat önce oluşturuldu
-                .expiration(new Date(System.currentTimeMillis() - 3_600_000L))  // 1 saat önce expire oldu
+                .issuedAt(new Date(System.currentTimeMillis() - 7_200_000L))
+                .expiration(new Date(System.currentTimeMillis() - 3_600_000L))
                 .signWith(Keys.hmacShaKeyFor(keyBytes))
                 .compact();
     }

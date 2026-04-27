@@ -4,32 +4,23 @@ import { toast } from 'sonner';
 const client = axios.create({
   baseURL: 'http://localhost:8080',
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true, // HttpOnly cookie her istekle otomatik gönderilir
 });
 
-// ── Request interceptor: JWT token'ı her isteğe ekle ─────────────────────────
-client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('jwt_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-// ── Response interceptor: hata kodlarını yakalayıp toast göster ──────────────
+// ── Response interceptor ──────────────────────────────────────────────────────
 client.interceptors.response.use(
   (response) => response,
   (error) => {
     const status  = error.response?.status;
     const message = error.response?.data?.message;
 
-    // Axios timeout (ECONNABORTED) veya ağ kopması — cevap yok
     if (error.code === 'ECONNABORTED' || !error.response) {
       toast.error('Sunucu yanıt vermedi. PDF işleme zaman aşımına uğramış olabilir. Lütfen tekrar deneyin.');
       return Promise.reject(error);
     }
 
     if (status === 401) {
-      localStorage.removeItem('jwt_token');
-      localStorage.removeItem('user_info');
-      // Login sayfasındayken sonsuz döngü olmasın
+      clearAuth();
       if (!window.location.pathname.includes('/login')) {
         toast.error('Oturum süreniz doldu, lütfen tekrar giriş yapın.');
         setTimeout(() => { window.location.href = '/login'; }, 1500);
@@ -41,7 +32,6 @@ client.interceptors.response.use(
     } else if (status >= 500) {
       toast.error('PDF analizi başarısız oldu. Lütfen tekrar deneyin.');
     }
-    // 400/422/404 hataları bileşen seviyesinde yönetilir (forma özel mesajlar)
 
     return Promise.reject(error);
   }
@@ -53,6 +43,9 @@ export const register = (data) =>
 
 export const login = (data) =>
   client.post('/api/v1/auth/login', data);
+
+export const logoutApi = () =>
+  client.post('/api/v1/auth/logout');
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
 export const getAnalyticsSummary = () =>
@@ -99,19 +92,16 @@ export const uploadStatement = (file) => {
   formData.append('file', file);
   return client.post('/api/v1/statements/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    // PDF extraction LLM çağrısı ~60-90s sürebilir; 210s ile güvenli marj bırak
     timeout: 210_000,
   });
 };
 
-// ── Auth helpers ──────────────────────────────────────────────────────────────
-export const saveAuth = (token, userInfo) => {
-  localStorage.setItem('jwt_token', token);
+// ── Auth helpers — token localStorage'dan kaldırıldı, HttpOnly cookie'de ─────
+export const saveAuth = (userInfo) => {
   localStorage.setItem('user_info', JSON.stringify(userInfo));
 };
 
 export const clearAuth = () => {
-  localStorage.removeItem('jwt_token');
   localStorage.removeItem('user_info');
 };
 
@@ -120,6 +110,6 @@ export const getStoredUser = () => {
   return raw ? JSON.parse(raw) : null;
 };
 
-export const isAuthenticated = () => !!localStorage.getItem('jwt_token');
+export const isAuthenticated = () => !!localStorage.getItem('user_info');
 
 export default client;

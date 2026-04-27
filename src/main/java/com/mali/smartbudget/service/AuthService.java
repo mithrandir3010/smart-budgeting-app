@@ -1,6 +1,7 @@
 package com.mali.smartbudget.service;
 
 import com.mali.smartbudget.dto.AuthResponse;
+import com.mali.smartbudget.dto.AuthTokenResult;
 import com.mali.smartbudget.dto.LoginRequest;
 import com.mali.smartbudget.dto.RegisterRequest;
 import com.mali.smartbudget.model.User;
@@ -35,7 +36,7 @@ public class AuthService implements UserDetailsService {
 
     // ── Kayıt ─────────────────────────────────────────────────────────────────
 
-    public AuthResponse register(RegisterRequest request) {
+    public AuthTokenResult register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw new IllegalArgumentException(
                     "Bu kullanıcı adı zaten alınmış: " + request.username());
@@ -57,12 +58,12 @@ public class AuthService implements UserDetailsService {
         log.info("Yeni kullanıcı kaydedildi: {}", user.getUsername());
 
         String token = jwtService.generateToken(user);
-        return new AuthResponse(token, user.getUsername(), user.getEmail(), user.getFullName());
+        return new AuthTokenResult(token, new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
     }
 
     // ── Giriş ─────────────────────────────────────────────────────────────────
 
-    public AuthResponse login(LoginRequest request) {
+    public AuthTokenResult login(LoginRequest request) {
         User user = userRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BadCredentialsException("Kullanıcı adı veya şifre hatalı."));
 
@@ -72,6 +73,6 @@ public class AuthService implements UserDetailsService {
 
         String token = jwtService.generateToken(user);
         log.info("Kullanıcı giriş yaptı: {}", user.getUsername());
-        return new AuthResponse(token, user.getUsername(), user.getEmail(), user.getFullName());
+        return new AuthTokenResult(token, new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
     }
 }

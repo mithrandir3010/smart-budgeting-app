@@ -5,7 +5,7 @@ import {
   Wallet, ShieldAlert, FileDown, Trash2,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { clearAuth, getStoredUser } from '../../api/client';
+import { clearAuth, getStoredUser, logoutApi } from '../../api/client';
 
 const NAV = [
   { to: '/',        icon: LayoutDashboard, label: 'Dashboard' },
@@ -35,7 +35,8 @@ export default function Sidebar({ onLimitClick, onDeleteAll, onDownloadPdf, pdfL
   const navigate = useNavigate();
   const user = getStoredUser();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logoutApi().catch(() => {});
     clearAuth();
     navigate('/login');
   };

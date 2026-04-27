@@ -20,8 +20,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await login(form);
-      const { token, username, email, fullName } = res.data;
-      saveAuth(token, { username, email, fullName });
+      const { username, email, fullName } = res.data;
+      saveAuth({ username, email, fullName });
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Giriş yapılamadı.');

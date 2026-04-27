@@ -20,8 +20,8 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const res = await register(form);
-      const { token, username, email, fullName } = res.data;
-      saveAuth(token, { username, email, fullName });
+      const { username, email, fullName } = res.data;
+      saveAuth({ username, email, fullName });
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || 'Kayıt oluşturulamadı.');
