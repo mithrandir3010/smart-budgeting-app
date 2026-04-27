@@ -13,11 +13,12 @@ const NAV = [
   { to: '/profile', icon: UserCircle,      label: 'Profil' },
 ];
 
-function NavItem({ to, icon: Icon, label }) {
+function NavItem({ to, icon: Icon, label, onClose }) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
+      onClick={onClose}
       className={({ isActive }) => cn(
         'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
         isActive
@@ -31,7 +32,8 @@ function NavItem({ to, icon: Icon, label }) {
   );
 }
 
-export default function Sidebar({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoading }) {
+// Paylaşılan içerik — desktop sidebar ve mobile drawer tarafından kullanılır
+export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoading, onClose }) {
   const navigate = useNavigate();
   const user = getStoredUser();
 
@@ -42,16 +44,11 @@ export default function Sidebar({ onLimitClick, onDeleteAll, onDownloadPdf, pdfL
   };
 
   return (
-    <motion.aside
-      initial={{ x: -20, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="glass-sidebar fixed left-0 top-0 h-full w-[var(--sidebar-w,240px)] flex flex-col z-30 select-none"
-    >
+    <>
       {/* Logo */}
       <div className="px-4 pt-6 pb-5">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center shadow-neon-green">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center">
             <Wallet size={16} className="text-emerald-400" strokeWidth={2} />
           </div>
           <div>
@@ -61,13 +58,12 @@ export default function Sidebar({ onLimitClick, onDeleteAll, onDownloadPdf, pdfL
         </div>
       </div>
 
-      {/* Divider */}
       <div className="mx-4 mb-4 h-px bg-white/[0.06]" />
 
       {/* Navigation */}
       <nav className="flex-1 px-2 space-y-1">
         {NAV.map((item) => (
-          <NavItem key={item.to} {...item} />
+          <NavItem key={item.to} {...item} onClose={onClose} />
         ))}
       </nav>
 
@@ -79,7 +75,7 @@ export default function Sidebar({ onLimitClick, onDeleteAll, onDownloadPdf, pdfL
         </p>
 
         <button
-          onClick={onLimitClick}
+          onClick={() => { onLimitClick?.(); onClose?.(); }}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.05] transition-all"
         >
           <ShieldAlert size={16} strokeWidth={1.8} />
@@ -87,7 +83,7 @@ export default function Sidebar({ onLimitClick, onDeleteAll, onDownloadPdf, pdfL
         </button>
 
         <button
-          onClick={onDownloadPdf}
+          onClick={() => { onDownloadPdf?.(); onClose?.(); }}
           disabled={pdfLoading}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-emerald-400/80 hover:text-emerald-300 hover:bg-emerald-500/[0.08] transition-all disabled:opacity-40"
         >
@@ -96,7 +92,7 @@ export default function Sidebar({ onLimitClick, onDeleteAll, onDownloadPdf, pdfL
         </button>
 
         <button
-          onClick={onDeleteAll}
+          onClick={() => { onDeleteAll?.(); onClose?.(); }}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-rose-400/70 hover:text-rose-300 hover:bg-rose-500/[0.08] transition-all"
         >
           <Trash2 size={16} strokeWidth={1.8} />
@@ -120,6 +116,20 @@ export default function Sidebar({ onLimitClick, onDeleteAll, onDownloadPdf, pdfL
           Çıkış Yap
         </button>
       </div>
+    </>
+  );
+}
+
+// Desktop sidebar — fixed, sadece lg+ ekranlarda görünür
+export default function Sidebar(props) {
+  return (
+    <motion.aside
+      initial={{ x: -20, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="glass-sidebar hidden lg:flex flex-col fixed left-0 top-0 h-full w-[var(--sidebar-w,240px)] z-30 select-none"
+    >
+      <SidebarInner {...props} />
     </motion.aside>
   );
 }
