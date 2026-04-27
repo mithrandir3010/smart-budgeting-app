@@ -1,6 +1,7 @@
 package com.mali.smartbudget.exception;
 
 import com.mali.smartbudget.exception.DuplicateStatementException;
+import com.mali.smartbudget.exception.RateLimitExceededException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,20 @@ import java.util.Map;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleRateLimitExceeded(RateLimitExceededException e) {
+        log.warn("Rate limit aşıldı. Retry-After: {}s", e.getRetryAfterSeconds());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("status", 429);
+        body.put("error", "Too Many Requests");
+        body.put("message", e.getMessage());
+        body.put("retryAfterSeconds", e.getRetryAfterSeconds());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(e.getRetryAfterSeconds()))
+                .body(body);
+    }
 
     @ExceptionHandler(DuplicateStatementException.class)
     public ResponseEntity<Map<String, Object>> handleDuplicateStatement(DuplicateStatementException e) {
