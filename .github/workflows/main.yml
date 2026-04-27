@@ -1,71 +1,38 @@
-name: CI — Build & Test
+name: CI — Build & Delivery
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
-# Aynı branch'e arka arkaya push yapıldığında önceki çalışmayı iptal et
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
-    name: Build & Test (Java 17)
+  # ── 1. Test ──────────────────────────────────────────────────────────────────
+  test:
+    name: Test (Java 17)
     runs-on: ubuntu-latest
 
-    env:
-      # Testler H2 in-memory kullanır — PostgreSQL servisi gerekmez.
-      # application-test.properties otomatik yüklenir.
-      SPRING_PROFILES_ACTIVE: test
-
-      # CI'da schema değişikliklerinden korunmak için validate modu.
-      # Testler application-test.properties'deki create-drop'u kullanır;
-      # bu env var yalnızca main uygulama context'ini etkiler.
-      DDL_AUTO: validate
-
     steps:
-      # ── 1. Kaynak kodu çek ──────────────────────────────────────────────────
-      - name: Checkout source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ── 2. JDK 17 (Eclipse Temurin) ─────────────────────────────────────────
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'maven'          # setup-java built-in Maven cache (pom.xml hash)
+          cache: 'maven'
 
-      # ── 3. Maven bağımlılık cache'i ─────────────────────────────────────────
-      # setup-java'nın cache özelliği ~/.m2/repository'i otomatik cache'ler.
-      # Aşağıdaki adım ek anahtar katmanı ekler (multi-module projelerde faydalı).
-      - name: Cache Maven local repo
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-
-      # ── 4. Build + tüm testler ──────────────────────────────────────────────
-      # OPENAI_API_KEY: GitHub Secret tanımlıysa gerçek anahtar kullanılır;
-      # tanımlı değilse (|| operatörü) placeholder devreye girer.
-      # ChatLanguageModel testlerde mock'lanır — gerçek API çağrısı yapılmaz.
-      - name: Build with Maven
-        run: |
-          mvn clean verify \
-            --batch-mode \
-            --no-transfer-progress \
-            -Dspring.profiles.active=test
+      - name: Run Maven tests
+        run: mvn verify --batch-mode --no-transfer-progress -Dspring.profiles.active=test
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-ci-placeholder-no-real-calls' }}
           SPRING_PROFILES_ACTIVE: test
 
-      # ── 5. Test raporlarını artifact olarak yükle (sadece hata durumunda) ───
-      - name: Upload Surefire test reports
+      - name: Upload Surefire reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -73,12 +40,11 @@ jobs:
           path: target/surefire-reports/
           retention-days: 7
 
-      # ── 6. Test özeti (GitHub Actions Summary) ──────────────────────────────
       - name: Test summary
         if: always()
         run: |
           echo "## Test Sonuçları" >> $GITHUB_STEP_SUMMARY
-          if [ -f target/surefire-reports/*.xml ]; then
+          if ls target/surefire-reports/*.xml 2>/dev/null | grep -q .; then
             TESTS=$(grep -h 'tests=' target/surefire-reports/*.xml | \
               grep -oP 'tests="\K[0-9]+' | awk '{s+=$1} END {print s}')
             FAILS=$(grep -h 'failures=' target/surefire-reports/*.xml | \
@@ -89,3 +55,70 @@ jobs:
           else
             echo "Test raporu bulunamadı." >> $GITHUB_STEP_SUMMARY
           fi
+
+  # ── 2. Build (Frontend) ──────────────────────────────────────────────────────
+  build:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  # ── 3. Deploy → GHCR (push to main only) ─────────────────────────────────────
+  deploy:
+    name: Docker → GHCR
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

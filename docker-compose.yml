@@ -1,5 +1,9 @@
 version: '3.8'
 
+# macOS (Docker Desktop): Spring Boot host'ta çalışır, sadece PostgreSQL container'da.
+# Host'tan container'a erişim: localhost:5434 (doğrudan çalışır, Linux'tan farkı yok).
+# Container içinden host'a erişim gerekirse: host.docker.internal kullan (Linux'ta extra-hosts gerekir).
+
 services:
   postgres:
     image: postgres:15
