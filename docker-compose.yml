@@ -3,20 +3,28 @@ version: '3.8'
 # macOS (Docker Desktop): Spring Boot host'ta çalışır, sadece PostgreSQL container'da.
 # Host'tan container'a erişim: localhost:5434 (doğrudan çalışır, Linux'tan farkı yok).
 # Container içinden host'a erişim gerekirse: host.docker.internal kullan (Linux'ta extra-hosts gerekir).
+#
+# Kullanım: Projeye .env dosyası ekle (bkz. .env.example), ardından:
+#   docker compose up -d
 
 services:
   postgres:
     image: postgres:15
     container_name: smart_budget_db
     environment:
-      POSTGRES_DB: smart_budget_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME:-smart_budget_db}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD env variable is required}
     ports:
-      - "5434:5432"
+      - "${DB_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-smart_budget_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
