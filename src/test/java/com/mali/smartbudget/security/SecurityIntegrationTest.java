@@ -3,6 +3,7 @@ package com.mali.smartbudget.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.model.User;
+import com.mali.smartbudget.repository.RefreshTokenRepository;
 import com.mali.smartbudget.repository.StatementRepository;
 import com.mali.smartbudget.repository.TransactionRepository;
 import com.mali.smartbudget.repository.UserRepository;
@@ -40,6 +41,7 @@ class SecurityIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository userRepository;
+    @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private TransactionRepository transactionRepository;
     @Autowired private StatementRepository statementRepository;
     @Autowired private ObjectMapper objectMapper;
@@ -51,6 +53,7 @@ class SecurityIntegrationTest {
     void cleanUp() {
         transactionRepository.deleteAll();
         statementRepository.deleteAll();
+        refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -108,7 +111,7 @@ class SecurityIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(registerBody("pub_reg_user")))
                     .andExpect(status().isCreated())
-                    .andExpect(cookie().exists("jwt_token"))
+                    .andExpect(cookie().exists("access_token"))
                     .andExpect(jsonPath("$.username").value("pub_reg_user"))
                     .andExpect(jsonPath("$.token").doesNotExist());
         }
@@ -141,8 +144,8 @@ class SecurityIntegrationTest {
                                     {"username":"login_test_user","password":"Test1234!"}
                                     """))
                     .andExpect(status().isOk())
-                    .andExpect(cookie().exists("jwt_token"))
-                    .andExpect(cookie().httpOnly("jwt_token", true))
+                    .andExpect(cookie().exists("access_token"))
+                    .andExpect(cookie().httpOnly("access_token", true))
                     .andExpect(jsonPath("$.token").doesNotExist());
         }
     }
@@ -161,7 +164,7 @@ class SecurityIntegrationTest {
             String token = registerAndGetToken("valid_usr_1");
 
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .cookie(new Cookie("jwt_token", token)))
+                            .cookie(new Cookie("access_token", token)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalSpending").exists())
                     .andExpect(jsonPath("$.projectedSpending").exists())
@@ -174,7 +177,7 @@ class SecurityIntegrationTest {
             String token = registerAndGetToken("valid_usr_2");
 
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .cookie(new Cookie("jwt_token", token)))
+                            .cookie(new Cookie("access_token", token)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray());
         }
@@ -185,7 +188,7 @@ class SecurityIntegrationTest {
             String token = registerAndGetToken("valid_usr_3");
 
             mockMvc.perform(get("/api/v1/analytics/subscriptions")
-                            .cookie(new Cookie("jwt_token", token)))
+                            .cookie(new Cookie("access_token", token)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray());
         }
@@ -203,7 +206,7 @@ class SecurityIntegrationTest {
         @DisplayName("Tamamen sahte (malformed) JWT cookie → 401")
         void malformedCookieToken_returns401() throws Exception {
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .cookie(new Cookie("jwt_token", "this.is.not.a.real.jwt")))
+                            .cookie(new Cookie("access_token", "this.is.not.a.real.jwt")))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -213,7 +216,7 @@ class SecurityIntegrationTest {
             String expired = buildExpiredToken("expired_usr");
 
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .cookie(new Cookie("jwt_token", expired)))
+                            .cookie(new Cookie("access_token", expired)))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -232,7 +235,7 @@ class SecurityIntegrationTest {
         @DisplayName("Rastgele base64 cookie (geçersiz imza) → 401")
         void randomBase64Cookie_invalidSignature_returns401() throws Exception {
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .cookie(new Cookie("jwt_token",
+                            .cookie(new Cookie("access_token",
                                     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJoYWNrZXIifQ.INVALID_SIGNATURE")))
                     .andExpect(status().isUnauthorized());
         }
@@ -257,13 +260,13 @@ class SecurityIntegrationTest {
             String tokenB = registerAndGetToken("iso_userB");
 
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .cookie(new Cookie("jwt_token", tokenB)))
+                            .cookie(new Cookie("access_token", tokenB)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isArray())
                     .andExpect(jsonPath("$").isEmpty());
 
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .cookie(new Cookie("jwt_token", tokenA)))
+                            .cookie(new Cookie("access_token", tokenA)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2))
                     .andExpect(jsonPath("$[0].description").value("Migros"));
@@ -280,12 +283,12 @@ class SecurityIntegrationTest {
             String tokenB = registerAndGetToken("sum_userB");
 
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .cookie(new Cookie("jwt_token", tokenB)))
+                            .cookie(new Cookie("access_token", tokenB)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalSpending").value(0));
 
             mockMvc.perform(get("/api/v1/analytics/summary")
-                            .cookie(new Cookie("jwt_token", tokenA)))
+                            .cookie(new Cookie("access_token", tokenA)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalSpending").value(13500.00));
         }
@@ -301,12 +304,12 @@ class SecurityIntegrationTest {
             String tokenB = registerAndGetToken("sub_userB");
 
             mockMvc.perform(get("/api/v1/analytics/subscriptions")
-                            .cookie(new Cookie("jwt_token", tokenB)))
+                            .cookie(new Cookie("access_token", tokenB)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$").isEmpty());
 
             mockMvc.perform(get("/api/v1/analytics/subscriptions")
-                            .cookie(new Cookie("jwt_token", tokenA)))
+                            .cookie(new Cookie("access_token", tokenA)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2));
         }
@@ -326,16 +329,16 @@ class SecurityIntegrationTest {
             transactionRepository.save(buildTx(userC, "C-Market", "200.00", "Market", false));
 
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .cookie(new Cookie("jwt_token", tokenB)))
+                            .cookie(new Cookie("access_token", tokenB)))
                     .andExpect(jsonPath("$").isEmpty());
 
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .cookie(new Cookie("jwt_token", tokenA)))
+                            .cookie(new Cookie("access_token", tokenA)))
                     .andExpect(jsonPath("$.length()").value(1))
                     .andExpect(jsonPath("$[0].description").value("A-Migros"));
 
             mockMvc.perform(get("/api/v1/analytics/transactions")
-                            .cookie(new Cookie("jwt_token", tokenC)))
+                            .cookie(new Cookie("access_token", tokenC)))
                     .andExpect(jsonPath("$.length()").value(2));
         }
     }
@@ -351,7 +354,7 @@ class SecurityIntegrationTest {
                 .andExpect(status().isCreated())
                 .andReturn();
 
-        return result.getResponse().getCookie("jwt_token").getValue();
+        return result.getResponse().getCookie("access_token").getValue();
     }
 
     private String registerBody(String username) {

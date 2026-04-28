@@ -7,24 +7,64 @@ const client = axios.create({
   withCredentials: true, // HttpOnly cookie her istekle otomatik gönderilir
 });
 
+// ── Token yenileme durumu — eş zamanlı 401'leri tek refresh'e indirger ────────
+let isRefreshing = false;
+let pendingQueue = [];
+
+function drainQueue(error) {
+  pendingQueue.forEach(({ resolve, reject }) => (error ? reject(error) : resolve()));
+  pendingQueue = [];
+}
+
+function redirectToLogin() {
+  clearAuth();
+  if (!window.location.pathname.includes('/login')) {
+    toast.error('Oturum süreniz doldu, lütfen tekrar giriş yapın.');
+    setTimeout(() => { window.location.href = '/login'; }, 1500);
+  }
+}
+
 // ── Response interceptor ──────────────────────────────────────────────────────
 client.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status  = error.response?.status;
     const message = error.response?.data?.message;
+    const config  = error.config;
 
     if (error.code === 'ECONNABORTED' || !error.response) {
       toast.error('Sunucu yanıt vermedi. PDF işleme zaman aşımına uğramış olabilir. Lütfen tekrar deneyin.');
       return Promise.reject(error);
     }
 
-    if (status === 401) {
-      clearAuth();
-      if (!window.location.pathname.includes('/login')) {
-        toast.error('Oturum süreniz doldu, lütfen tekrar giriş yapın.');
-        setTimeout(() => { window.location.href = '/login'; }, 1500);
+    // Auth endpoint'leri (login/register/refresh/logout) için refresh döngüsüne girme
+    if (status === 401 && !config._retry && !config.url?.includes('/auth/')) {
+      config._retry = true;
+
+      if (isRefreshing) {
+        // Refresh devam ediyor — bu isteği tamamlanınca yeniden dene
+        return new Promise((resolve, reject) =>
+          pendingQueue.push({ resolve, reject })
+        ).then(() => client(config)).catch(() => Promise.reject(error));
       }
+
+      isRefreshing = true;
+      try {
+        await client.post('/api/v1/auth/refresh');
+        drainQueue(null);
+        return client(config);
+      } catch {
+        drainQueue(new Error('session_expired'));
+        redirectToLogin();
+        return Promise.reject(error);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    // Auth endpoint'lerinden gelen 401 veya refresh başarısız → login'e yönlendir
+    if (status === 401 && !config.url?.includes('/auth/')) {
+      redirectToLogin();
     } else if (status === 409) {
       toast.warning(message || 'Bu işlem zaten mevcut.');
     } else if (status === 413) {

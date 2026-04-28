@@ -4,6 +4,7 @@ import com.mali.smartbudget.dto.AuthResponse;
 import com.mali.smartbudget.dto.AuthTokenResult;
 import com.mali.smartbudget.dto.LoginRequest;
 import com.mali.smartbudget.dto.RegisterRequest;
+import com.mali.smartbudget.model.RefreshToken;
 import com.mali.smartbudget.model.User;
 import com.mali.smartbudget.repository.UserRepository;
 import com.mali.smartbudget.security.JwtService;
@@ -24,8 +25,7 @@ public class AuthService implements UserDetailsService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-
-    // ── UserDetailsService ─────────────────────────────────────────────────────
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -33,8 +33,6 @@ public class AuthService implements UserDetailsService {
                 .orElseThrow(() -> new UsernameNotFoundException(
                         "Kullanıcı bulunamadı: " + username));
     }
-
-    // ── Kayıt ─────────────────────────────────────────────────────────────────
 
     public AuthTokenResult register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
@@ -57,11 +55,11 @@ public class AuthService implements UserDetailsService {
         userRepository.save(user);
         log.info("Yeni kullanıcı kaydedildi: {}", user.getUsername());
 
-        String token = jwtService.generateToken(user);
-        return new AuthTokenResult(token, new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
+        String accessToken = jwtService.generateToken(user);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+        return new AuthTokenResult(accessToken, refreshToken.getToken(),
+                new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
     }
-
-    // ── Giriş ─────────────────────────────────────────────────────────────────
 
     public AuthTokenResult login(LoginRequest request) {
         User user = userRepository.findByUsername(request.username())
@@ -71,8 +69,10 @@ public class AuthService implements UserDetailsService {
             throw new BadCredentialsException("Kullanıcı adı veya şifre hatalı.");
         }
 
-        String token = jwtService.generateToken(user);
+        String accessToken = jwtService.generateToken(user);
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
         log.info("Kullanıcı giriş yaptı: {}", user.getUsername());
-        return new AuthTokenResult(token, new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
+        return new AuthTokenResult(accessToken, refreshToken.getToken(),
+                new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
     }
 }

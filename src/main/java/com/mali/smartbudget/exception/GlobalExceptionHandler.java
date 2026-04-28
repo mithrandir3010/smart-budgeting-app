@@ -1,6 +1,7 @@
 package com.mali.smartbudget.exception;
 
 import com.mali.smartbudget.exception.DuplicateStatementException;
+import com.mali.smartbudget.exception.InvalidRefreshTokenException;
 import com.mali.smartbudget.exception.RateLimitExceededException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,12 @@ import java.util.Map;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidRefreshToken(InvalidRefreshTokenException e) {
+        log.warn("Geçersiz refresh token: {}", e.getMessage());
+        return build(HttpStatus.UNAUTHORIZED, e.getMessage());
+    }
 
     @ExceptionHandler(RateLimitExceededException.class)
     public ResponseEntity<Map<String, Object>> handleRateLimitExceeded(RateLimitExceededException e) {
