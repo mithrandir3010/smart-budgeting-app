@@ -42,6 +42,9 @@ public class AuthController {
     @Value("${jwt.refresh-expiration:604800000}")
     private long refreshExpiration;
 
+    @Value("${app.cookie.secure:false}")
+    private boolean cookieSecure;
+
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Kayıt isteği: username={}", request.username());
@@ -101,8 +104,8 @@ public class AuthController {
     private ResponseCookie buildAccessCookie(String token) {
         return ResponseCookie.from("access_token", token)
                 .httpOnly(true)
-                .secure(true)
-                .sameSite("Strict")
+                .secure(cookieSecure)
+                .sameSite(cookieSecure ? "Strict" : "Lax")
                 .path("/")
                 .maxAge(accessExpiration / 1000)
                 .build();
@@ -111,8 +114,8 @@ public class AuthController {
     private ResponseCookie buildRefreshCookie(String token) {
         return ResponseCookie.from("refresh_token", token)
                 .httpOnly(true)
-                .secure(true)
-                .sameSite("Strict")
+                .secure(cookieSecure)
+                .sameSite(cookieSecure ? "Strict" : "Lax")
                 .path("/api/v1/auth/")
                 .maxAge(refreshExpiration / 1000)
                 .build();
@@ -121,8 +124,8 @@ public class AuthController {
     private ResponseCookie expiredCookie(String name) {
         return ResponseCookie.from(name, "")
                 .httpOnly(true)
-                .secure(true)
-                .sameSite("Strict")
+                .secure(cookieSecure)
+                .sameSite(cookieSecure ? "Strict" : "Lax")
                 .path("/")
                 .maxAge(0)
                 .build();

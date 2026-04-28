@@ -11,6 +11,20 @@ export default function RegisterPage() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const extractErrorMessage = (err) => {
+    const responseData = err?.response?.data;
+    if (typeof responseData?.message === 'string' && responseData.message.trim()) {
+      return responseData.message;
+    }
+    if (typeof responseData === 'string' && responseData.trim()) {
+      return responseData;
+    }
+    if (!err?.response) {
+      return 'Sunucuya baglanilamadi. Backend calisiyor mu kontrol edin.';
+    }
+    return 'Kayit olusturulamadi.';
+  };
+
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -24,7 +38,7 @@ export default function RegisterPage() {
       saveAuth({ username, email, fullName });
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Kayıt oluşturulamadı.');
+      setError(extractErrorMessage(err));
     } finally {
       setLoading(false);
     }

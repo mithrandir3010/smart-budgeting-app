@@ -33,7 +33,7 @@ client.interceptors.response.use(
     const config  = error.config;
 
     if (error.code === 'ECONNABORTED' || !error.response) {
-      toast.error('Sunucu yanıt vermedi. PDF işleme zaman aşımına uğramış olabilir. Lütfen tekrar deneyin.');
+      toast.error('Sunucuya ulasilamadi veya CORS engeline takildi. Backend URL ve CORS ayarlarini kontrol edin.');
       return Promise.reject(error);
     }
 

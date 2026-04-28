@@ -53,6 +53,13 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         response.setStatus(429);
         response.setContentType("application/json;charset=UTF-8");
         response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
+        // Bu filter CORS filter'ından önce çalışır; 429'da CORS header'larını elle ekle
+        String origin = request.getHeader("Origin");
+        if (origin != null) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+            response.setHeader("Access-Control-Allow-Credentials", "true");
+            response.setHeader("Vary", "Origin");
+        }
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", LocalDateTime.now().toString());
