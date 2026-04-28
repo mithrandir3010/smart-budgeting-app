@@ -18,13 +18,17 @@ import org.springframework.util.StopWatch;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -86,12 +90,19 @@ public class ExtractionService {
             """;
 
     /**
-     * PDF metninden LLM'e gönderilecek maksimum karakter sayısı.
-     *
-     * <p>~9 000 token'a karşılık gelir; geri kalan token bütçesi (4096 max_tokens) JSON çıktısına ayrılır.
-     * Daha uzun metinler bu sınırda kesilir ve log'a uyarı yazılır.
+     * Tek bir chunk'ın taşıyabileceği maksimum karakter sayısı (~9 000 token).
+     * Bir chunk bu sınırı aşarsa uyarı loglanır ama yine de gönderilir.
      */
     private static final int MAX_INPUT_CHARS = 60_000;
+
+    /** Her chunk'taki satır sayısı. 100 satır ≈ 20-30 işlem. */
+    private static final int LINES_PER_CHUNK = 100;
+
+    /**
+     * Chunk sınırlarında taksit bilgisinin bölünmesini engelleyen örtüşme satırı sayısı.
+     * Önceki chunk'ın son 3 satırı bir sonraki chunk'ın başına eklenir.
+     */
+    private static final int CHUNK_OVERLAP_LINES = 3;
 
     // Tarih formatları (LLM bazen farklı format döner — tümünü destekle)
     private static final List<DateTimeFormatter> DATE_FORMATTERS = List.of(
@@ -188,77 +199,29 @@ public class ExtractionService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // LLM JSON üretimi
+    // LLM çağrısı — tek chunk
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * PDF dosyasını okur ve LLM ile işlem JSON'ı üretir.
-     *
-     * <p>Pre-processing adımı burada uygulanır:
-     * <ol>
-     *   <li>PDF → ham metin ({@link PdfService})</li>
-     *   <li>Ham metin → temiz metin ({@link PdfTextCleaner})</li>
-     *   <li>Temiz metin → prompt → LLM → JSON</li>
-     * </ol>
+     * Verilen chunk metni için LLM çağrısı yapar ve ham JSON yanıtını döner.
+     * Chunk'lara bölme ve deduplication {@link #extractDtos} tarafından yönetilir.
      */
-    public String extractTransactionsAsJson(MultipartFile file) throws IOException {
-        log.info(">>> Extraction mode: LLM | apiKey: {}...",
-                openAiApiKey.substring(0, Math.min(10, openAiApiKey.length())));
-
-        // Adım A — PDF'ten ham metin
-        String rawText = pdfService.extractText(file);
-        log.info("[1/4] PDF okundu. Ham metin: {} karakter", rawText.length());
-
-        if (rawText.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Dosya formatı analiz edilemedi. PDF metin içermiyor; " +
-                    "taranmış (image-only) veya şifreli bir PDF olabilir.");
+    private String callLlmForChunk(String chunkText, int chunkIdx, int totalChunks) {
+        if (chunkText.length() > MAX_INPUT_CHARS) {
+            log.warn("[chunk-{}/{}] Chunk {} karakter — limit {}. Yine de gönderiliyor.",
+                    chunkIdx, totalChunks, chunkText.length(), MAX_INPUT_CHARS);
         }
-
-        // Ham metnin ilk 800 karakterini logla (debug için)
-        log.debug("[1/4] Ham metin (ilk 800 karakter):\n{}",
-                rawText.substring(0, Math.min(800, rawText.length())));
-
-        // Adım B — Pre-processing: gürültü temizleme
-        String cleanText = PdfTextCleaner.clean(rawText);
-        log.info("[1/4] PdfTextCleaner tamamlandı. Temiz metin: {} karakter", cleanText.length());
-
-        if (cleanText.isBlank()) {
-            throw new IllegalArgumentException(
-                    "Dosya formatı analiz edilemedi. Temizleme sonrası işlenebilir metin kalmadı.");
-        }
-
-        // Temiz metnin ilk 800 karakterini logla
-        log.debug("[1/4] Temiz metin (ilk 800 karakter):\n{}",
-                cleanText.substring(0, Math.min(800, cleanText.length())));
-
-        // Adım C — Chunking: metin çok uzunsa keserek token bütçesini koru
-        String inputText = cleanText;
-        log.info("[1/4] Temiz metin toplam {} karakter (limit: {}).",
-                inputText.length(), MAX_INPUT_CHARS);
-        if (inputText.length() > MAX_INPUT_CHARS) {
-            log.warn("[1/4] Metin {} karakter — {} karaktere kırpılıyor. Ekstre tam olarak işlenemiyor!",
-                    inputText.length(), MAX_INPUT_CHARS);
-            inputText = inputText.substring(0, MAX_INPUT_CHARS);
-        } else {
-            log.info("[1/4] Metin limite sığıyor — kırpma yok, tüm ekstre işlenecek.");
-        }
-
-        // Adım D — LLM
-        String prompt = String.format(PROMPT_TEMPLATE, inputText);
-        log.info("[2/4] LLM isteği gönderiliyor... (~{} tahmini token)",
-                prompt.length() / 4);
+        String prompt = String.format(PROMPT_TEMPLATE, chunkText);
+        log.info("[chunk-{}/{}] LLM isteği gönderiliyor... (~{} tahmini token | {} satır)",
+                chunkIdx, totalChunks, prompt.length() / 4, countLines(chunkText));
 
         StopWatch llmSw = new StopWatch();
         llmSw.start();
         String jsonResponse = chatLanguageModel.generate(prompt);
         llmSw.stop();
-        log.info("[2/4] LLM yanıtı alındı. {} karakter | LLM süresi={}ms",
-                jsonResponse.length(), llmSw.getTotalTimeMillis());
-
-        // LLM cevabının tamamını logla (production'da DEBUG seviyesine çek)
-        log.debug("[2/4] LLM ham yanıt:\n{}", jsonResponse);
-
+        log.info("[chunk-{}/{}] LLM yanıtı alındı. {} karakter | {}ms",
+                chunkIdx, totalChunks, jsonResponse.length(), llmSw.getTotalTimeMillis());
+        log.debug("[chunk-{}/{}] LLM ham yanıt:\n{}", chunkIdx, totalChunks, jsonResponse);
         return jsonResponse;
     }
 
@@ -269,9 +232,10 @@ public class ExtractionService {
     /**
      * PDF'ten harcama DTO'larını ayıklar — saf I/O, hiç DB işlemi yapmaz.
      *
-     * <p>Tüm doğrulama kontrolleri (hash, dönem çakışması) tamamlandıktan SONRA
-     * DB'ye yazmak için bu metodu çağırın. Böylece bir doğrulama hatası
-     * DB'deki mevcut verileri bozmaz (eski delete işleminin rollback sorunu ortadan kalkar).
+     * <p>PDF ONCE okunur, temizlenir, {@value #LINES_PER_CHUNK}-satırlık chunk'lara bölünür.
+     * Her chunk için ayrı LLM çağrısı yapılır; sonuçlar (date+description+amount) anahtarıyla
+     * tekilleştirilir. {@link #enrichWithInstallments} için PDF ikinci kez okunmaz — aynı
+     * temiz metin yeniden kullanılır.
      *
      * @param file Kullanıcının yüklediği PDF ekstre dosyası
      * @return Parse edilmiş TransactionDto listesi (boş olamaz — exception fırlar)
@@ -279,71 +243,85 @@ public class ExtractionService {
      * @throws IllegalArgumentException Geçerli işlem bulunamazsa
      */
     public List<TransactionDto> extractDtos(MultipartFile file) throws IOException {
-
         StopWatch pipelineSw = new StopWatch("ExtractionPipeline");
         pipelineSw.start("full-pipeline");
-        log.info("[2/4] JSON ayıklama başlıyor...");
-        String rawLlmJson = extractTransactionsAsJson(file);
 
-        // LLM bazen ```json ... ``` bloğu içinde döner — temizle
-        String fencedStripped = stripMarkdownFences(rawLlmJson);
+        // ── [1/5] PDF'ten ham metin & temizleme ─────────────────────────────
+        log.info(">>> Extraction mode: LLM (chunked) | apiKey: {}...",
+                openAiApiKey.substring(0, Math.min(10, openAiApiKey.length())));
+        String rawText = pdfService.extractText(file);
+        log.info("[1/5] PDF okundu. Ham metin: {} karakter", rawText.length());
 
-        // Türk sayı formatı düzeltici: 1.250.00 → 1250.00, 1.250,00 → 1250.00
-        // Bu adım Jackson'a geçmeden önce malformed JSON number'ları onarır.
-        String sanitized = sanitizeJson(fencedStripped);
-
-        // JSON onarıcı: LLM cevabı max_tokens'ta yarıda kesilebilir.
-        // Eksik kapanış parantezlerini tamamlayarak kurtarılabilir kayıtları korur.
-        String cleanJson = repairJson(sanitized);
-        log.info("[2/4] JSON hazır. İlk 200 karakter: {}",
-                cleanJson.substring(0, Math.min(200, cleanJson.length())));
-
-        // Fault-tolerant parse: her satır bağımsız, biri bozuk olsa diğerleri kurtarılır
-        log.info("[3/4] Fault-tolerant JSON parse başlıyor...");
-        List<TransactionDto> dtos;
-        try {
-            dtos = parseRowsFaultTolerant(cleanJson);
-        } catch (Exception e) {
-            // Parse tamamen başarısız — LLM'in ham çıktısını logla
-            log.error("[3/4] JSON parse tamamen başarısız!\n" +
-                      "── LLM ham yanıt ({} karakter) ──────────────────\n{}\n" +
-                      "── Sanitize sonrası ({} karakter) ───────────────\n{}",
-                    rawLlmJson.length(), rawLlmJson,
-                    cleanJson.length(), cleanJson);
-            throw e;
+        if (rawText.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Dosya formatı analiz edilemedi. PDF metin içermiyor; " +
+                    "taranmış (image-only) veya şifreli bir PDF olabilir.");
         }
-        log.info("[3/4] Parse tamamlandı. {} geçerli DTO.", dtos.size());
+        log.debug("[1/5] Ham metin (ilk 800 karakter):\n{}",
+                rawText.substring(0, Math.min(800, rawText.length())));
 
-        if (dtos.isEmpty()) {
-            log.error("[3/4] Hiçbir geçerli işlem çıkarılamadı. cleanJson boyutu: {} karakter",
-                    cleanJson.length());
+        String cleanText = PdfTextCleaner.clean(rawText);
+        log.info("[1/5] PdfTextCleaner tamamlandı. Temiz metin: {} karakter", cleanText.length());
+
+        if (cleanText.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Dosya formatı analiz edilemedi. Temizleme sonrası işlenebilir metin kalmadı.");
+        }
+        log.debug("[1/5] Temiz metin (ilk 800 karakter):\n{}",
+                cleanText.substring(0, Math.min(800, cleanText.length())));
+
+        // ── [2/5] Chunk'lara bölme & sıralı LLM çağrıları ──────────────────
+        List<String> chunks = splitIntoChunks(cleanText, LINES_PER_CHUNK);
+        log.info("[2/5] Metin {} chunk'a bölündü ({} satır/chunk, {} satır örtüşme). Toplam: {} satır.",
+                chunks.size(), LINES_PER_CHUNK, CHUNK_OVERLAP_LINES, countLines(cleanText));
+
+        Set<String>          seen    = new HashSet<>();
+        List<TransactionDto> allDtos = new ArrayList<>();
+
+        for (int i = 0; i < chunks.size(); i++) {
+            String chunk    = chunks.get(i);
+            int    chunkIdx = i + 1;
+            log.info("[chunk-{}/{}] İşleniyor... {} satır",
+                    chunkIdx, chunks.size(), countLines(chunk));
+
+            String               rawJson   = callLlmForChunk(chunk, chunkIdx, chunks.size());
+            List<TransactionDto> chunkDtos = parseChunk(rawJson, chunkIdx);
+
+            int added = 0;
+            for (TransactionDto dto : chunkDtos) {
+                if (seen.add(dtoKey(dto))) {
+                    allDtos.add(dto);
+                    added++;
+                }
+            }
+            log.info("[chunk-{}/{}] {} işlem ayıklandı, {} yeni eklendi ({} mükerrer atlandı).",
+                    chunkIdx, chunks.size(), chunkDtos.size(), added, chunkDtos.size() - added);
+        }
+
+        log.info("[2/5] Tüm chunk'lar işlendi. Toplam benzersiz DTO: {}", allDtos.size());
+
+        if (allDtos.isEmpty()) {
+            log.error("[2/5] Hiçbir geçerli işlem çıkarılamadı.");
             throw new IllegalArgumentException(
                     "Dosya formatı analiz edilemedi. PDF'te tanınan bir harcama işlemi bulunamadı. " +
                     "Lütfen geçerli bir banka ekstresi yüklediğinizden emin olun.");
         }
 
-        // ── [4/4] Kural tabanlı taksit post-processor ────────────────────────
-        // LLM'in gözden kaçırdığı "N / M taksidi" satırlarını Java regex ile yakala.
-        // PDF metni tekrar okunur (bytes hafızada — maliyetsiz).
-        log.info("[4/4] Kural tabanlı taksit post-processor başlıyor...");
+        // ── [3/5] Kural tabanlı taksit post-processor ───────────────────────
+        log.info("[3/5] Kural tabanlı taksit post-processor başlıyor...");
         try {
-            String rawTextForEnrich = pdfService.extractText(file);
-            String cleanTextForEnrich = PdfTextCleaner.clean(rawTextForEnrich);
-            dtos = enrichWithInstallments(dtos, cleanTextForEnrich);
+            allDtos = enrichWithInstallments(allDtos, cleanText);
         } catch (Exception e) {
-            log.warn("[4/4] Post-processor başarısız, atlanıyor: {}", e.getMessage());
+            log.warn("[3/5] Post-processor başarısız, atlanıyor: {}", e.getMessage());
         }
 
-        // ── [5/5] Merchant cache zenginleştirme + kategorileme ───────────────
-        // Her DTO için:
-        //   1. Cache'de varsa → cache'den kategori/abonelik al (LLM yerine güvenilir kayıt)
-        //   2. Yoksa → Java tespitini kullan ve cache'e kaydet (öğren)
-        log.info("[5/5] Merchant cache zenginleştirme başlıyor...");
-        List<com.mali.smartbudget.dto.TransactionDto> enriched = new ArrayList<>();
+        // ── [4/5] Merchant cache zenginleştirme + kategorileme ───────────────
+        log.info("[4/5] Merchant cache zenginleştirme başlıyor...");
+        List<TransactionDto> enriched = new ArrayList<>();
         long cacheHits = 0;
 
-        for (com.mali.smartbudget.dto.TransactionDto dto : dtos) {
-            String finalCategory     = dto.category();
+        for (TransactionDto dto : allDtos) {
+            String  finalCategory     = dto.category();
             boolean finalSubscription = dto.isSubscription();
 
             try {
@@ -365,7 +343,7 @@ public class ExtractionService {
             com.mali.smartbudget.model.Category categoryEnum =
                     categorizationService.categorize(dto.description(), finalCategory);
 
-            enriched.add(new com.mali.smartbudget.dto.TransactionDto(
+            enriched.add(new TransactionDto(
                     dto.date(), dto.description(), dto.amount(),
                     finalCategory, dto.currency(), finalSubscription,
                     dto.isInstallment(), dto.currentInstallment(), dto.totalInstallments(),
@@ -373,8 +351,8 @@ public class ExtractionService {
             ));
         }
 
-        dtos = enriched;
-        int total = dtos.size();
+        allDtos = enriched;
+        int  total  = allDtos.size();
         long hitPct = total == 0 ? 0 : Math.round(100.0 * cacheHits / total);
         log.info("[cache] {}/{} işlem merchant cache'den çözüldü (hit oranı: %{})",
                 cacheHits, total, hitPct);
@@ -382,12 +360,13 @@ public class ExtractionService {
             log.info("[cache] Tüm işlemler cache'de bulundu! " +
                      "OpenAI yalnızca yeni merchant'lar için kullanıldı.");
         }
-        log.info("[kategorileme] {} DTO kategorize edildi.", total);
 
+        // ── [5/5] Tamamlandı ─────────────────────────────────────────────────
+        log.info("[5/5] {} DTO kategorize edildi.", total);
         pipelineSw.stop();
         log.info("[pipeline] Extraction tamamlandı. {} DTO | toplam süre={}ms",
-                dtos.size(), pipelineSw.getTotalTimeMillis());
-        return dtos;
+                allDtos.size(), pipelineSw.getTotalTimeMillis());
+        return allDtos;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -608,6 +587,53 @@ public class ExtractionService {
                 .replaceAll("(?s)^```\\s*",    "")
                 .replaceAll("```$",            "")
                 .trim();
+    }
+
+    /**
+     * Temiz metni satır bazlı {@code linesPerChunk}-satırlık chunk'lara böler.
+     * Chunk sınırlarında taksit alt satırlarının kopmaması için son {@link #CHUNK_OVERLAP_LINES}
+     * satır bir sonraki chunk'ın başına eklenir (örtüşme).
+     */
+    private List<String> splitIntoChunks(String text, int linesPerChunk) {
+        if (text == null || text.isBlank()) return List.of(text == null ? "" : text);
+        String[]     lines  = text.split("\n", -1);
+        List<String> chunks = new ArrayList<>();
+        int stride = Math.max(1, linesPerChunk - CHUNK_OVERLAP_LINES);
+        for (int start = 0; start < lines.length; start += stride) {
+            int end = Math.min(start + linesPerChunk, lines.length);
+            chunks.add(String.join("\n", Arrays.copyOfRange(lines, start, end)));
+            if (end == lines.length) break;
+        }
+        return chunks;
+    }
+
+    /**
+     * Tek bir chunk'ın ham LLM JSON'ını parse eder.
+     * Hata durumunda chunk atlanır; exception tüm pipeline'ı patlatmaz.
+     */
+    private List<TransactionDto> parseChunk(String rawJson, int chunkIdx) {
+        try {
+            String stripped  = stripMarkdownFences(rawJson);
+            String sanitized = sanitizeJson(stripped);
+            String repaired  = repairJson(sanitized);
+            log.debug("[chunk-{}] JSON hazır (ilk 200 karakter): {}",
+                    chunkIdx, repaired.substring(0, Math.min(200, repaired.length())));
+            return parseRowsFaultTolerant(repaired);
+        } catch (Exception e) {
+            log.warn("[chunk-{}] Parse başarısız, chunk atlanıyor: {}", chunkIdx, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Deduplication anahtarı: tarih + açıklama + tutar (2 ondalık, yuvarlama HALF_UP). */
+    private String dtoKey(TransactionDto dto) {
+        return dto.date() + "|" + dto.description() + "|" +
+               dto.amount().setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    /** Metindeki satır sayısını döner; boş/null metin için 0. */
+    private int countLines(String text) {
+        return (text == null || text.isEmpty()) ? 0 : text.split("\n", -1).length;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
