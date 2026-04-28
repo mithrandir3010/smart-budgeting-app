@@ -16,7 +16,7 @@ COPY --from=frontend-build /app/dist/ src/main/resources/static/
 RUN mvn package -DskipTests -B --no-transfer-progress
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY --from=backend-build /app/target/*.jar app.jar
 EXPOSE 8080
