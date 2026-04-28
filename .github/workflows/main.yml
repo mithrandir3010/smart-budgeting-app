@@ -45,13 +45,12 @@ jobs:
         run: |
           echo "## Test Sonuçları" >> $GITHUB_STEP_SUMMARY
           if ls target/surefire-reports/*.xml 2>/dev/null | grep -q .; then
-            TESTS=$(grep -h 'tests=' target/surefire-reports/*.xml | \
-              grep -oP 'tests="\K[0-9]+' | awk '{s+=$1} END {print s}')
-            FAILS=$(grep -h 'failures=' target/surefire-reports/*.xml | \
-              grep -oP 'failures="\K[0-9]+' | awk '{s+=$1} END {print s}')
-            echo "| Toplam | Başarısız |" >> $GITHUB_STEP_SUMMARY
-            echo "|--------|-----------|" >> $GITHUB_STEP_SUMMARY
-            echo "| $TESTS | $FAILS    |" >> $GITHUB_STEP_SUMMARY
+            TESTS=$(grep -h 'tests='    target/surefire-reports/*.xml | grep -oP 'tests="\K[0-9]+'    | awk '{s+=$1} END {print s}')
+            FAILS=$(grep -h 'failures=' target/surefire-reports/*.xml | grep -oP 'failures="\K[0-9]+' | awk '{s+=$1} END {print s}')
+            ERRS=$(grep  -h 'errors='   target/surefire-reports/*.xml | grep -oP 'errors="\K[0-9]+'   | awk '{s+=$1} END {print s}')
+            echo "| Toplam | Başarısız | Hatalı |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| $TESTS | $FAILS    | $ERRS  |" >> $GITHUB_STEP_SUMMARY
           else
             echo "Test raporu bulunamadı." >> $GITHUB_STEP_SUMMARY
           fi

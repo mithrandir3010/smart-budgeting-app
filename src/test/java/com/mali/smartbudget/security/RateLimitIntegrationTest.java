@@ -1,5 +1,6 @@
 package com.mali.smartbudget.security;
 
+import com.mali.smartbudget.repository.RefreshTokenRepository;
 import com.mali.smartbudget.repository.UserRepository;
 import com.mali.smartbudget.service.RateLimitingService;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,11 +35,13 @@ class RateLimitIntegrationTest {
 
     @Autowired MockMvc mockMvc;
     @Autowired RateLimitingService rateLimitingService;
+    @Autowired RefreshTokenRepository refreshTokenRepository;
     @Autowired UserRepository userRepository;
 
     @BeforeEach
     void setUp() {
         rateLimitingService.clearAll();
+        refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 
