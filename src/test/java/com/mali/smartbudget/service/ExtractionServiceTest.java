@@ -28,9 +28,8 @@ import static org.mockito.Mockito.*;
 /**
  * ExtractionService — Birim Testleri
  *
- * ExtractionService artık saf I/O sorumluluğuna sahip:
- *   extractDtos(file) → List<TransactionDto>  (DB işlemi yok)
- * DB işlemleri (delete + save) StatementService'e taşındı.
+ * LLM kısa schema: {"d":"YYYY-MM-DD","n":"Mağaza","a":1234.56,"t":0}
+ * Kategori ve abonelik tespiti Java tarafında yapılır (detectGranularCategory / detectSubscription).
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ExtractionService — Birim Testleri")
@@ -39,6 +38,7 @@ class ExtractionServiceTest {
     @Mock private ChatLanguageModel chatLanguageModel;
     @Mock private PdfService pdfService;
     @Mock private CategorizationService categorizationService;
+    @Mock private MerchantCacheService merchantCacheService;
 
     @InjectMocks
     private ExtractionService extractionService;
@@ -55,13 +55,22 @@ class ExtractionServiceTest {
                 "file", "ekstre.pdf", "application/pdf", "PDF içeriği".getBytes()
         );
 
-        // Kategorileme tüm mevcut testlerde sabit OTHER döndürür — kategorileme mantığı
-        // CategorizationServiceTest'te ayrıca test edilir.
+        // Kategorileme sabit OTHER döndürür — kategorileme CategorizationServiceTest'te ayrıca test edilir.
         org.mockito.Mockito.lenient()
                 .when(categorizationService.categorize(
                         org.mockito.ArgumentMatchers.any(),
                         org.mockito.ArgumentMatchers.any()))
                 .thenReturn(Category.OTHER);
+
+        // Merchant cache testlerde varsayılan olarak boş döner (cache miss) — learn() sessizce çalışır.
+        org.mockito.Mockito.lenient()
+                .when(merchantCacheService.lookup(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(java.util.Optional.empty());
+        org.mockito.Mockito.lenient()
+                .doNothing().when(merchantCacheService)
+                .learn(org.mockito.ArgumentMatchers.any(),
+                       org.mockito.ArgumentMatchers.any(),
+                       org.mockito.ArgumentMatchers.anyBoolean());
     }
 
     // =========================================================================
@@ -87,7 +96,7 @@ class ExtractionServiceTest {
         doReturn("""
                 ```json
                 [
-                  {"date": "2026-04-01", "description": "Test", "amount": 100.00, "category": "Diğer", "currency": "TRY"}
+                  {"d": "2026-04-01", "n": "Test", "a": 100.00, "t": 0}
                 ]
                 ```""").when(chatLanguageModel).generate(anyString());
 
@@ -115,7 +124,7 @@ class ExtractionServiceTest {
     @DisplayName("Tarih dd.MM.yyyy formatında parse edilir (05.04.2026)")
     void extractDtos_dateFormat_ddmmyyyyDot_parsedCorrectly() throws IOException {
         String json = """
-                [{"date":"05.04.2026","description":"Migros","amount":100.00,"category":"Market","currency":"TRY"}]
+                [{"d":"05.04.2026","n":"Migros","a":100.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -130,7 +139,7 @@ class ExtractionServiceTest {
     @DisplayName("Tarih dd/MM/yyyy formatında parse edilir (05/04/2026)")
     void extractDtos_dateFormat_ddmmyyyySlash_parsedCorrectly() throws IOException {
         String json = """
-                [{"date":"05/04/2026","description":"Starbucks","amount":89.50,"category":"Kafe","currency":"TRY"}]
+                [{"d":"05/04/2026","n":"Starbucks","a":89.50,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -145,7 +154,7 @@ class ExtractionServiceTest {
     @DisplayName("Tarih yyyy/MM/dd formatında parse edilir (2026/04/05)")
     void extractDtos_dateFormat_yyyymmddSlash_parsedCorrectly() throws IOException {
         String json = """
-                [{"date":"2026/04/05","description":"Shell","amount":450.00,"category":"Akaryakıt","currency":"TRY"}]
+                [{"d":"2026/04/05","n":"Shell","a":450.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -160,7 +169,7 @@ class ExtractionServiceTest {
     @DisplayName("Tarih d.M.yyyy kısa formatında parse edilir (5.4.2026)")
     void extractDtos_dateFormat_shortDot_parsedCorrectly() throws IOException {
         String json = """
-                [{"date":"5.4.2026","description":"Carrefour","amount":320.00,"category":"Market","currency":"TRY"}]
+                [{"d":"5.4.2026","n":"Carrefour","a":320.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -175,7 +184,7 @@ class ExtractionServiceTest {
     @DisplayName("Tarih dd-MM-yyyy formatında parse edilir (05-04-2026)")
     void extractDtos_dateFormat_ddmmyyyyDash_parsedCorrectly() throws IOException {
         String json = """
-                [{"date":"05-04-2026","description":"BİM","amount":178.00,"category":"Market","currency":"TRY"}]
+                [{"d":"05-04-2026","n":"BİM","a":178.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -191,12 +200,12 @@ class ExtractionServiceTest {
     void extractDtos_allDateFormats_allRowsParsed() throws IOException {
         String json = """
                 [
-                  {"date":"2026-04-01","description":"ISO",   "amount":10,"category":"Diğer","currency":"TRY"},
-                  {"date":"02.04.2026","description":"Dot",   "amount":20,"category":"Diğer","currency":"TRY"},
-                  {"date":"03/04/2026","description":"Slash", "amount":30,"category":"Diğer","currency":"TRY"},
-                  {"date":"2026/04/04","description":"YSlash","amount":40,"category":"Diğer","currency":"TRY"},
-                  {"date":"5.4.2026", "description":"Short",  "amount":50,"category":"Diğer","currency":"TRY"},
-                  {"date":"06-04-2026","description":"Dash",  "amount":60,"category":"Diğer","currency":"TRY"}
+                  {"d":"2026-04-01","n":"ISO",   "a":10,"t":0},
+                  {"d":"02.04.2026","n":"Dot",   "a":20,"t":0},
+                  {"d":"03/04/2026","n":"Slash", "a":30,"t":0},
+                  {"d":"2026/04/04","n":"YSlash","a":40,"t":0},
+                  {"d":"5.4.2026", "n":"Short",  "a":50,"t":0},
+                  {"d":"06-04-2026","n":"Dash",  "a":60,"t":0}
                 ]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
@@ -220,7 +229,7 @@ class ExtractionServiceTest {
     @DisplayName("Türk formatı string tutar ('1.234,56') → 1234.56 olarak normalize edilir")
     void extractDtos_turkishAmountFormat_normalizedCorrectly() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":"Migros","amount":"1.234,56","category":"Market","currency":"TRY"}]
+                [{"d":"2026-04-01","n":"Migros","a":"1.234,56","t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -235,7 +244,7 @@ class ExtractionServiceTest {
     @DisplayName("Virgüllü ondalık string tutar ('89,50') → 89.50 olarak normalize edilir")
     void extractDtos_commaDecimalAmount_normalizedCorrectly() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":"Kafe","amount":"89,50","category":"Kafe","currency":"TRY"}]
+                [{"d":"2026-04-01","n":"Kafe","a":"89,50","t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -250,7 +259,7 @@ class ExtractionServiceTest {
     @DisplayName("Integer tutar (245) → 245.00 olarak normalize edilir")
     void extractDtos_integerAmount_normalizedWithTwoDecimals() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":"BİM","amount":245,"category":"Market","currency":"TRY"}]
+                [{"d":"2026-04-01","n":"BİM","a":245,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -270,8 +279,8 @@ class ExtractionServiceTest {
     void extractDtos_nullDate_rowSkipped() throws IOException {
         String json = """
                 [
-                  {"date":null,"description":"NullDate","amount":300.00,"category":"Market","currency":"TRY"},
-                  {"date":"2026-04-02","description":"Geçerli","amount":100.00,"category":"Kafe","currency":"TRY"}
+                  {"d":null,"n":"NullDate","a":300.00,"t":0},
+                  {"d":"2026-04-02","n":"Geçerli","a":100.00,"t":0}
                 ]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
@@ -288,8 +297,8 @@ class ExtractionServiceTest {
     void extractDtos_invalidDateFormat_rowSkipped() throws IOException {
         String json = """
                 [
-                  {"date":"April 5, 2026","description":"BadDate","amount":200.00,"category":"Kira","currency":"TRY"},
-                  {"date":"2026-04-01","description":"Geçerli","amount":500.00,"category":"Market","currency":"TRY"}
+                  {"d":"April 5, 2026","n":"BadDate","a":200.00,"t":0},
+                  {"d":"2026-04-01","n":"Geçerli","a":500.00,"t":0}
                 ]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
@@ -306,8 +315,8 @@ class ExtractionServiceTest {
     void extractDtos_nullAmount_rowSkipped() throws IOException {
         String json = """
                 [
-                  {"date":"2026-04-01","description":"NullAmount","amount":null,"category":"Market","currency":"TRY"},
-                  {"date":"2026-04-02","description":"Geçerli","amount":150.00,"category":"Kafe","currency":"TRY"}
+                  {"d":"2026-04-01","n":"NullAmount","a":null,"t":0},
+                  {"d":"2026-04-02","n":"Geçerli","a":150.00,"t":0}
                 ]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
@@ -324,8 +333,8 @@ class ExtractionServiceTest {
     void extractDtos_zeroAmount_rowSkipped() throws IOException {
         String json = """
                 [
-                  {"date":"2026-04-01","description":"ZeroAmount","amount":0.00,"category":"Diğer","currency":"TRY"},
-                  {"date":"2026-04-02","description":"Geçerli","amount":250.00,"category":"Market","currency":"TRY"}
+                  {"d":"2026-04-01","n":"ZeroAmount","a":0.00,"t":0},
+                  {"d":"2026-04-02","n":"Geçerli","a":250.00,"t":0}
                 ]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
@@ -342,11 +351,11 @@ class ExtractionServiceTest {
     void extractDtos_partialFailure_onlyValidRowsReturned() throws IOException {
         String json = """
                 [
-                  {"date":"2026-04-01","description":"Geçerli1","amount":100.00,"category":"Market","currency":"TRY"},
-                  {"date":null,        "description":"NullDate", "amount":200.00,"category":"Market","currency":"TRY"},
-                  {"date":"2026-04-03","description":"Geçerli2","amount":300.00,"category":"Kafe", "currency":"TRY"},
-                  {"date":"INVALID",   "description":"BadDate",  "amount":400.00,"category":"Kira", "currency":"TRY"},
-                  {"date":"2026-04-05","description":"ZeroAmt",  "amount":0.00,  "category":"Diğer","currency":"TRY"}
+                  {"d":"2026-04-01","n":"Geçerli1","a":100.00,"t":0},
+                  {"d":null,        "n":"NullDate","a":200.00,"t":0},
+                  {"d":"2026-04-03","n":"Geçerli2","a":300.00,"t":0},
+                  {"d":"INVALID",   "n":"BadDate", "a":400.00,"t":0},
+                  {"d":"2026-04-05","n":"ZeroAmt", "a":0.00,  "t":0}
                 ]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
@@ -364,8 +373,8 @@ class ExtractionServiceTest {
     void extractDtos_allRowsInvalid_throwsIllegalArgumentException() throws IOException {
         String json = """
                 [
-                  {"date":null,"description":"NullDate1","amount":100.00,"category":"Market","currency":"TRY"},
-                  {"date":null,"description":"NullDate2","amount":200.00,"category":"Kafe", "currency":"TRY"}
+                  {"d":null,"n":"NullDate1","a":100.00,"t":0},
+                  {"d":null,"n":"NullDate2","a":200.00,"t":0}
                 ]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
@@ -381,10 +390,10 @@ class ExtractionServiceTest {
     // =========================================================================
 
     @Test
-    @DisplayName("null description → 'Bilinmeyen' varsayılanı kullanılır")
+    @DisplayName("null description (n) → 'Bilinmeyen' varsayılanı kullanılır")
     void extractDtos_nullDescription_defaultsToBilinmeyen() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":null,"amount":100.00,"category":"Market","currency":"TRY"}]
+                [{"d":"2026-04-01","n":null,"a":100.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -396,10 +405,10 @@ class ExtractionServiceTest {
     }
 
     @Test
-    @DisplayName("null category → 'Diğer' varsayılanı kullanılır")
-    void extractDtos_nullCategory_defaultsToDiger() throws IOException {
+    @DisplayName("Bilinmeyen mağaza adı → detectGranularCategory 'Diğer' döner")
+    void extractDtos_unknownDescription_categoryDefaultsToDiger() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":"Test","amount":100.00,"category":null,"currency":"TRY"}]
+                [{"d":"2026-04-01","n":"XYZ Bilinmeyen Yer","a":100.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -411,10 +420,10 @@ class ExtractionServiceTest {
     }
 
     @Test
-    @DisplayName("null currency → 'TRY' varsayılanı kullanılır")
-    void extractDtos_nullCurrency_defaultsToTRY() throws IOException {
+    @DisplayName("currency alanı yoksa 'TRY' kullanılır")
+    void extractDtos_noCurrencyField_defaultsToTRY() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":"Test","amount":100.00,"category":"Market","currency":null}]
+                [{"d":"2026-04-01","n":"Test","a":100.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -426,10 +435,10 @@ class ExtractionServiceTest {
     }
 
     @Test
-    @DisplayName("boş string currency → 'TRY' varsayılanı kullanılır")
-    void extractDtos_emptyCurrency_defaultsToTRY() throws IOException {
+    @DisplayName("currency alanı LLM'den gelse de her zaman 'TRY' olarak sabitlenir")
+    void extractDtos_currencyAlwaysTRY() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":"Test","amount":100.00,"category":"Market","currency":""}]
+                [{"d":"2026-04-01","n":"Test","a":100.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -441,10 +450,10 @@ class ExtractionServiceTest {
     }
 
     @Test
-    @DisplayName("isSubscription string 'true' → boolean true olarak parse edilir")
-    void extractDtos_isSubscriptionStringTrue_parsedAsTrue() throws IOException {
+    @DisplayName("Netflix açıklaması → detectSubscription true döner")
+    void extractDtos_netflixDescription_isSubscriptionTrue() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":"Netflix","amount":79.99,"category":"Eğlence","currency":"TRY","isSubscription":"true"}]
+                [{"d":"2026-04-01","n":"Netflix","a":79.99,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -456,10 +465,10 @@ class ExtractionServiceTest {
     }
 
     @Test
-    @DisplayName("isSubscription null → false varsayılan değeri kullanılır")
-    void extractDtos_isSubscriptionNull_defaultsFalse() throws IOException {
+    @DisplayName("Market açıklaması → detectSubscription false döner")
+    void extractDtos_marketDescription_isSubscriptionFalse() throws IOException {
         String json = """
-                [{"date":"2026-04-01","description":"Market","amount":200.00,"category":"Market","currency":"TRY","isSubscription":null}]
+                [{"d":"2026-04-01","n":"Migros Market","a":200.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(json).when(chatLanguageModel).generate(anyString());
@@ -477,9 +486,9 @@ class ExtractionServiceTest {
     @Test
     @DisplayName("LLM 1.250.00 yazarsa (iki nokta) → Jackson hata vermeden 1250.00 parse edilir")
     void extractDtos_doubleDotAmount_sanitizedAndParsed() throws IOException {
-        // Bu tam olarak bildirilen hatayı simüle eder: "amount": 1.250.00
+        // Bu tam olarak bildirilen hatayı simüle eder: "a": 1.250.00
         String malformedJson = """
-                [{"date":"2026-04-01","description":"Migros","amount":1.250.00,"category":"Market","currency":"TRY","isSubscription":false}]
+                [{"d":"2026-04-01","n":"Migros","a":1.250.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(malformedJson).when(chatLanguageModel).generate(anyString());
@@ -494,7 +503,7 @@ class ExtractionServiceTest {
     @DisplayName("LLM 12.480.37 yazarsa (büyük tutar, iki nokta) → 12480.37 parse edilir")
     void extractDtos_largeTurkishDoubleDot_sanitizedAndParsed() throws IOException {
         String malformedJson = """
-                [{"date":"2026-04-05","description":"Kira","amount":12.480.37,"category":"Kira","currency":"TRY","isSubscription":false}]
+                [{"d":"2026-04-05","n":"Kira","a":12.480.37,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(malformedJson).when(chatLanguageModel).generate(anyString());
@@ -509,7 +518,7 @@ class ExtractionServiceTest {
     @DisplayName("LLM 1.250,00 yazarsa (Türk formatı bare number) → 1250.00 parse edilir")
     void extractDtos_turkishCommaInBareNumber_sanitizedAndParsed() throws IOException {
         // Virgül JSON'da number içinde geçemez — sanitizer düzeltmeli
-        String malformedJson = "[{\"date\":\"2026-04-01\",\"description\":\"Shell\",\"amount\":1.250,00,\"category\":\"Akaryakıt\",\"currency\":\"TRY\",\"isSubscription\":false}]";
+        String malformedJson = "[{\"d\":\"2026-04-01\",\"n\":\"Shell\",\"a\":1.250,00,\"t\":0}]";
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(malformedJson).when(chatLanguageModel).generate(anyString());
 
@@ -557,26 +566,26 @@ class ExtractionServiceTest {
     }
 
     @Test
-    @DisplayName("sanitizeJson: karışık tutarlar içeren JSON'ı düzeltir")
+    @DisplayName("sanitizeJson: karışık tutarlar içeren JSON'ı düzeltir (yeni 'a' anahtarı)")
     void sanitizeJson_mixedAmounts_allFixed() {
         String input = """
                 [
-                  {"amount":1.250.00},
-                  {"amount":12.480,37},
-                  {"amount":"89,90"},
-                  {"amount":1500.00},
-                  {"amount":49.99}
+                  {"a":1.250.00},
+                  {"a":12.480,37},
+                  {"a":"89,90"},
+                  {"a":1500.00},
+                  {"a":49.99}
                 ]
                 """;
         String result = extractionService.sanitizeJson(input);
 
-        assertThat(result).contains("\"amount\":1250.00");
-        assertThat(result).contains("\"amount\":12480.37");
-        assertThat(result).contains("\"amount\":89.90");
-        assertThat(result).contains("\"amount\":1500.00");
-        assertThat(result).contains("\"amount\":49.99");
+        assertThat(result).contains("\"a\":1250.00");
+        assertThat(result).contains("\"a\":12480.37");
+        assertThat(result).contains("\"a\":89.90");
+        assertThat(result).contains("\"a\":1500.00");
+        assertThat(result).contains("\"a\":49.99");
         // Tırnak karakterleri kaldırılmış olmalı
-        assertThat(result).doesNotContain("\"amount\":\"");
+        assertThat(result).doesNotContain("\"a\":\"");
     }
 
     // =========================================================================
@@ -627,9 +636,9 @@ class ExtractionServiceTest {
         // İki tam obje + başlamış ama bitmemiş üçüncü obje
         String truncated = """
                 [
-                  {"date":"2026-04-01","description":"Migros","amount":250.00,"category":"Market","currency":"TRY","isSubscription":false},
-                  {"date":"2026-04-02","description":"Starbucks","amount":89.50,"category":"Kafe","currency":"TRY","isSubscription":false},
-                  {"date":"2026-04-03","description":"Netflix","amount":49.9
+                  {"d":"2026-04-01","n":"Migros","a":250.00,"t":0},
+                  {"d":"2026-04-02","n":"Starbucks","a":89.50,"t":0},
+                  {"d":"2026-04-03","n":"Netflix","a":49.9
                 """;
         when(pdfService.extractText(any())).thenReturn("metin");
         doReturn(truncated).when(chatLanguageModel).generate(anyString());
@@ -647,13 +656,11 @@ class ExtractionServiceTest {
     // =========================================================================
 
     @Test
-    @DisplayName("Hata 3: LLM yanlış taksit (1/1) atamışsa post-processor doğru (3/3) ile üzerine yazar")
+    @DisplayName("Hata 3: LLM yanlış taksit (t=1) atamışsa post-processor doğru (3/3) ile üzerine yazar")
     void enrichWithInstallments_wrongInstallmentByLlm_correctedByPostProcessor() throws IOException {
         String pdfText = "14 Ocak 2026 TURKCELL 412,53\n1.237,60 TL'lik işlemin 3 / 3 taksidi\n";
         String llmJson = """
-                [{"date":"2026-01-14","description":"Turkcell","amount":412.53,
-                  "category":"Fatura","currency":"TRY","isSubscription":false,
-                  "isInstallment":true,"currentInstallment":1,"totalInstallments":1}]
+                [{"d":"2026-01-14","n":"Turkcell","a":412.53,"t":1}]
                 """;
         when(pdfService.extractText(any())).thenReturn(pdfText);
         doReturn(llmJson).when(chatLanguageModel).generate(anyString());
@@ -676,9 +683,7 @@ class ExtractionServiceTest {
                 """;
         // LLM farklı bir işlem döndürdü, TURKCELL'i tamamen atladı
         String llmJson = """
-                [{"date":"2026-04-01","description":"Migros","amount":250.00,
-                  "category":"Market","currency":"TRY","isSubscription":false,
-                  "isInstallment":false,"currentInstallment":null,"totalInstallments":null}]
+                [{"d":"2026-04-01","n":"Migros","a":250.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn(pdfText);
         doReturn(llmJson).when(chatLanguageModel).generate(anyString());
@@ -707,9 +712,7 @@ class ExtractionServiceTest {
                 2.069,90 TL'lik işlemin 1 / 3 taksidi
                 """;
         String llmJson = """
-                [{"date":"2026-03-17","description":"Turkcell","amount":689.96,
-                  "category":"Fatura","currency":"TRY","isSubscription":false,
-                  "isInstallment":false,"currentInstallment":null,"totalInstallments":null}]
+                [{"d":"2026-03-17","n":"Turkcell","a":689.96,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn(pdfText);
         doReturn(llmJson).when(chatLanguageModel).generate(anyString());
@@ -736,9 +739,7 @@ class ExtractionServiceTest {
                 """;
         // LLM sadece TODTV'yi yakaladı, TURKCELL ve İYZİCO'yu atladı
         String llmJson = """
-                [{"date":"2026-03-07","description":"Todtv.com.tr","amount":179.00,
-                  "category":"Eğlence","currency":"TRY","isSubscription":false,
-                  "isInstallment":false,"currentInstallment":null,"totalInstallments":null}]
+                [{"d":"2026-03-07","n":"Todtv.com.tr","a":179.00,"t":0}]
                 """;
         when(pdfService.extractText(any())).thenReturn(pdfText);
         doReturn(llmJson).when(chatLanguageModel).generate(anyString());
@@ -771,5 +772,81 @@ class ExtractionServiceTest {
         assertThat(iyzico.totalInstallments()).isEqualTo(6);
     }
 
-}
+    // =========================================================================
+    // detectGranularCategory — birim testleri
+    // =========================================================================
 
+    @Test
+    @DisplayName("detectGranularCategory: Migros → Market")
+    void detectGranularCategory_migros_returnsMarket() {
+        assertThat(extractionService.detectGranularCategory("Migros")).isEqualTo("Market");
+        assertThat(extractionService.detectGranularCategory("BİM")).isEqualTo("Market");
+        assertThat(extractionService.detectGranularCategory("A101 Market")).isEqualTo("Market");
+    }
+
+    @Test
+    @DisplayName("detectGranularCategory: Starbucks → Kafe")
+    void detectGranularCategory_starbucks_returnsKafe() {
+        assertThat(extractionService.detectGranularCategory("Starbucks")).isEqualTo("Kafe");
+        assertThat(extractionService.detectGranularCategory("Kahve Dünyası")).isEqualTo("Kafe");
+    }
+
+    @Test
+    @DisplayName("detectGranularCategory: McDonald's → Restoran")
+    void detectGranularCategory_mcdonalds_returnsRestoran() {
+        assertThat(extractionService.detectGranularCategory("McDonald's")).isEqualTo("Restoran");
+        assertThat(extractionService.detectGranularCategory("Burger King")).isEqualTo("Restoran");
+    }
+
+    @Test
+    @DisplayName("detectGranularCategory: Shell → Akaryakıt")
+    void detectGranularCategory_shell_returnsAkaryakit() {
+        assertThat(extractionService.detectGranularCategory("Shell")).isEqualTo("Akaryakıt");
+        assertThat(extractionService.detectGranularCategory("Opet Petrol")).isEqualTo("Akaryakıt");
+    }
+
+    @Test
+    @DisplayName("detectGranularCategory: Netflix → Eğlence")
+    void detectGranularCategory_netflix_returnsEglence() {
+        assertThat(extractionService.detectGranularCategory("Netflix")).isEqualTo("Eğlence");
+        assertThat(extractionService.detectGranularCategory("Spotify")).isEqualTo("Eğlence");
+    }
+
+    @Test
+    @DisplayName("detectGranularCategory: Turkcell → Fatura")
+    void detectGranularCategory_turkcell_returnsFatura() {
+        assertThat(extractionService.detectGranularCategory("Turkcell")).isEqualTo("Fatura");
+    }
+
+    @Test
+    @DisplayName("detectGranularCategory: bilinmeyen → Diğer")
+    void detectGranularCategory_unknown_returnsDiger() {
+        assertThat(extractionService.detectGranularCategory("XYZ Bilinmeyen Yer")).isEqualTo("Diğer");
+        assertThat(extractionService.detectGranularCategory("")).isEqualTo("Diğer");
+        assertThat(extractionService.detectGranularCategory(null)).isEqualTo("Diğer");
+    }
+
+    // =========================================================================
+    // detectSubscription — birim testleri
+    // =========================================================================
+
+    @Test
+    @DisplayName("detectSubscription: Netflix/Spotify/Disney → true")
+    void detectSubscription_knownServices_returnsTrue() {
+        assertThat(extractionService.detectSubscription("Netflix")).isTrue();
+        assertThat(extractionService.detectSubscription("Spotify")).isTrue();
+        assertThat(extractionService.detectSubscription("Disney+")).isTrue();
+        assertThat(extractionService.detectSubscription("YouTube Premium")).isTrue();
+        assertThat(extractionService.detectSubscription("iCloud")).isTrue();
+        assertThat(extractionService.detectSubscription("Adobe Creative Cloud")).isTrue();
+    }
+
+    @Test
+    @DisplayName("detectSubscription: Market/Restoran → false")
+    void detectSubscription_nonSubscription_returnsFalse() {
+        assertThat(extractionService.detectSubscription("Migros")).isFalse();
+        assertThat(extractionService.detectSubscription("Turkcell")).isFalse();
+        assertThat(extractionService.detectSubscription("Shell")).isFalse();
+        assertThat(extractionService.detectSubscription(null)).isFalse();
+    }
+}

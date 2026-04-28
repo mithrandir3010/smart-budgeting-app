@@ -53,97 +53,33 @@ import java.util.regex.Pattern;
 public class ExtractionService {
 
     /**
-     * Türk bankası ekstrelerine özel LLM prompt'u — kasıtlı olarak kısa tutulmuştur.
-     *
-     * <p>Uzun prompt → model JSON yerine açıklamaya odaklanır ve cevap token'ları israf edilir.
-     * Bu template sadece kuralları ve örnekleri içerir; model en kısa yoldan JSON üretir.
+     * Türk bankası ekstrelerine özel LLM prompt'u.
+     * Kısa schema {d,n,a,t} → ~95% daha az prompt token.
+     * Kategori ve abonelik tespiti Java tarafında yapılır (detectGranularCategory / detectSubscription).
      */
     private static final String PROMPT_TEMPLATE = """
-            Turkish bank statement below. Extract spending transactions and return ONLY a JSON array.
-            No intro sentence, no explanation, no markdown fences — start with [ and end with ].
+            Turkish bank statement below. Extract spending transactions → ONLY a JSON array.
+            Start with [ end with ]. No markdown fences, no explanation.
 
-            FORMAT (each object exactly like this):
-            {"date":"YYYY-MM-DD","description":"Name","amount":1234.56,"category":"Category","currency":"TRY","isSubscription":false,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
+            Schema — each object exactly:
+            {"d":"YYYY-MM-DD","n":"Merchant Name","a":1234.56,"t":0}
 
-            AMOUNT RULES — CRITICAL:
-            • Use ONLY dot as decimal separator. NEVER output a thousands-separator dot.
-            • 1.250,00 TL → 1250.00  |  12.480,37 TL → 12480.37  |  89,90 TL → 89.90
-            • Wrong: 1.250.00  Wrong: 1.250,00  Wrong: "1250.00"   Right: 1250.00
+            d = date ISO 8601 (15.03.2026 → "2026-03-15")
+            n = merchant name only; strip POS ID/ref/terminal/branch/city; fix casing; keep ğşıçöü; MKT→Market, REST→Restoran, PETROL→Akaryakıt
+            a = amount as plain number, dot-decimal only
+                1.250,00 TL → 1250.00 | 12.480,37 → 12480.37 | 89,90 → 89.90
+                WRONG: 1.250.00  WRONG: 1.250,00  WRONG: "1250.00"  RIGHT: 1250.00
+            t = 0 for normal transactions.
+                If the line immediately BELOW the transaction reads "X TL'lik işlemin N / M taksidi",
+                set t=N (current installment number). Ignore "amount / count" on the same line.
 
-            DATE: ISO 8601 output. 15.03.2026 or 15/03/2026 → "2026-03-15"
+            Skip: balance rows, IBAN transfers, page headers/footers, VAT/fee lines, incoming transfers,
+                  refunds, rows containing "TAKSİTLENDİRME İŞLEM FAİZİ". Max 150 transactions.
 
-            DESCRIPTION: Store name only. Remove POS ID, terminal, ref no, branch, city. Fix casing.
-            Keep Turkish chars (ğ ş ı ç ö ü). MKT→Market, REST→Restoran, PETROL→Akaryakıt.
-
-            CATEGORY RULES — assign exactly one, strictly follow this priority order:
-            1. Market    → Migros, BİM, A101, ŞOK, Carrefour, Hakmar, Macro, Kiler, METRO,
-                           Gıda, Manav, Kasap, Bakkal, Süpermarket, Market, Kuruyemiş, Fırın,
-                           Ekmek, Pazar, Sebze, Meyve, Aktarı, Temizlik (grocery stores only)
-            2. Kafe      → Starbucks, Gloria Jeans, Kahve Dünyası, Espresso, Cafe, Kafe, Coffee
-            3. Restoran  → Restaurant, Restoran, Burger, Pizza, Döner, Kebap, Balık, Yemek,
-                           Fast food, McDonald's, KFC, Popeyes, Subway, Noodle
-            4. Ulaşım    → İETT, Metro, Metrobüs, Otobüs, Dolmuş, Taksi, Uber, BiTaksi,
-                           Trambüs, Vapur, Marmaray, Tren, TCDD, UKOME, Toplu Taşıma
-            5. Akaryakıt → Shell, BP, Opet, Total, Petrol, Benzin, Akaryakıt, LPG
-            6. Fatura    → ISKI, IGDAS, AYEDAS, BEDAS, Elektrik, Doğalgaz, Su faturası,
-                           Turkcell, Vodafone, Türk Telekom, İnternet, Fatura
-            7. Kira      → Kira, Aidat, Site ücreti
-            8. Sağlık    → Eczane, Pharmacy, Hastane, Klinik, Doktor, Diş, Optik, Laborat
-            9. Eğlence   → Netflix, Spotify, YouTube, Disney, Sinema, Tiyatro, Konser, Oyun
-            10. Teknoloji → Apple, Samsung, Mediamarkt, Vatan, Teknosa, Arçelik, Beko,
-                            Amazon, Trendyol Elektronik, Bilgisayar, Telefon, Tablet
-            11. Giyim    → Zara, H&M, LC Waikiki, Mavi, Koton, Pull&Bear, DeFacto, Adidas,
-                           Nike, Giyim, Ayakkabı, Çanta, Tekstil
-            12. Eğitim   → Üniversite, Kurs, Kitap, Udemy, Coursera, Okul, Dershane
-            13. Sigorta  → Sigorta, Kasko, Emeklilik, BES, DASK
-            14. Diğer    → Only if none of the above match.
-            IMPORTANT: "Diğer" is a last resort. Always try to match one of the 13 named categories first.
-
-            isSubscription true: Netflix/Spotify/YouTube/AppleTV/Disney+/Amazon Prime/iCloud/
-                                  GoogleOne/Gym üyelik/Adobe/Office365/Dergi abonelik
-            isSubscription false: all other transactions
-
-            INSTALLMENT DETECTION — READ EVERY LINE AND THE LINE BELOW IT:
-            A transaction is installment (isInstallment:true) when EITHER condition is met:
-              A) The transaction's own line contains any of: taksit, TAKSİT, taksidi, TAKSİDİ,
-                 taksitli, TAKSİTLİ, TAKSIT (case-insensitive)
-              B) The line IMMEDIATELY below the transaction contains the pattern:
-                 "[amount] TL'lik işlemin [N] / [M] taksidi"
-                 (spaces around / are normal in Turkish bank statements)
-
-            When condition B applies:
-            – The amount, date, description come from the UPPER line
-            – N and M come from the sub-line: currentInstallment=N, totalInstallments=M
-            – The number after the merchant name like "1.200,00 / 3" is remaining-amount/remaining-count,
-              NOT the installment fraction — use ONLY the "taksidi" sub-line for N and M.
-
-            When condition A applies (taksit keyword in same line):
-            – If the line also contains N/M or N / M fraction → currentInstallment=N, totalInstallments=M
-            – Otherwise → currentInstallment=1, totalInstallments=1
-
-            SKIP: balance rows, IBAN, page headers/footers, VAT/fee lines, incoming transfers,
-                  refunds, any row containing "TAKSİTLENDİRME İŞLEM FAİZİ".
-            Extract AT MOST 150 transactions.
-
-            EXAMPLES:
-            "15.03.2026 MIGROS 1.250,00 TL"
-              → {"date":"2026-03-15","description":"Migros","amount":1250.00,"category":"Market","currency":"TRY","isSubscription":false,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
-            "01.04.2026 NETFLIX.COM 149,90 TL"
-              → {"date":"2026-04-01","description":"Netflix","amount":149.90,"category":"Eğlence","currency":"TRY","isSubscription":true,"isInstallment":false,"currentInstallment":null,"totalInstallments":null}
-            "14 Ocak 2026 TURKCELL 412,53
-             1.237,60 TL'lik işlemin 3 / 3 taksidi 515,30"
-              → {"date":"2026-01-14","description":"Turkcell","amount":412.53,"category":"Fatura","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":3,"totalInstallments":3}
-            "23 Ocak 2026 İYZİCO/ERCAN CANDAN 400,00 1.200,00 / 3
-             2.400,00 TL'lik işlemin 3 / 6 taksidi"
-              → {"date":"2026-01-23","description":"İyzico/Ercan Candan","amount":400.00,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":3,"totalInstallments":6}
-            "07 Mart 2026 TODTV.COM.TR 179,00 1.969,00 / 11
-             2.148,00 TL'lik işlemin 1 / 12 taksidi"
-              → {"date":"2026-03-07","description":"Todtv.com.tr","amount":179.00,"category":"Eğlence","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":12}
-            "14 Mart 2026 AVIS.COM.TR 2.501,15 12.505,75 / 5
-             15.006,90 TL'lik işlemin 1 / 6 taksidi"
-              → {"date":"2026-03-14","description":"Avis.com.tr","amount":2501.15,"category":"Diğer","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":1,"totalInstallments":6}
-            "10.04.2026 SAMSUNG TV 3/12 TAKSİT 850,50 TL"
-              → {"date":"2026-04-10","description":"Samsung TV","amount":850.50,"category":"Teknoloji","currency":"TRY","isSubscription":false,"isInstallment":true,"currentInstallment":3,"totalInstallments":12}
+            Examples:
+            "15.03.2026 MIGROS 1.250,00 TL" → {"d":"2026-03-15","n":"Migros","a":1250.00,"t":0}
+            "14 Ocak 2026 TURKCELL 412,53\\n1.237,60 TL'lik işlemin 3 / 3 taksidi" → {"d":"2026-01-14","n":"Turkcell","a":412.53,"t":3}
+            "23 Ocak 2026 İYZİCO/ERCAN CANDAN 400,00 1.200,00 / 3\\n2.400,00 TL'lik işlemin 3 / 6 taksidi" → {"d":"2026-01-23","n":"İyzico/Ercan Candan","a":400.00,"t":3}
 
             Statement:
             %s
@@ -188,7 +124,7 @@ public class ExtractionService {
      * </ol>
      */
     private static final Pattern AMOUNT_JSON_PATTERN = Pattern.compile(
-            "(\"amount\"\\s*:\\s*)(\"?)(\\d[\\d.]*(?:,\\d+)?)(\"?)",
+            "(\"a\"\\s*:\\s*)(\"?)(\\d[\\d.]*(?:,\\d+)?)(\"?)",
             Pattern.CASE_INSENSITIVE
     );
 
@@ -234,6 +170,7 @@ public class ExtractionService {
     private final PdfService pdfService;
     private final ObjectMapper objectMapper;
     private final CategorizationService categorizationService;
+    private final MerchantCacheService merchantCacheService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Başlangıç doğrulaması
@@ -397,16 +334,55 @@ public class ExtractionService {
             log.warn("[4/4] Post-processor başarısız, atlanıyor: {}", e.getMessage());
         }
 
-        // ── Kategorizasyon: her DTO'ya enum kategori ata ─────────────────────
-        dtos = dtos.stream()
-                .map(dto -> new com.mali.smartbudget.dto.TransactionDto(
-                        dto.date(), dto.description(), dto.amount(),
-                        dto.category(), dto.currency(), dto.isSubscription(),
-                        dto.isInstallment(), dto.currentInstallment(), dto.totalInstallments(),
-                        categorizationService.categorize(dto.description(), dto.category())
-                ))
-                .toList();
-        log.info("[kategorileme] {} DTO kategorize edildi.", dtos.size());
+        // ── [5/5] Merchant cache zenginleştirme + kategorileme ───────────────
+        // Her DTO için:
+        //   1. Cache'de varsa → cache'den kategori/abonelik al (LLM yerine güvenilir kayıt)
+        //   2. Yoksa → Java tespitini kullan ve cache'e kaydet (öğren)
+        log.info("[5/5] Merchant cache zenginleştirme başlıyor...");
+        List<com.mali.smartbudget.dto.TransactionDto> enriched = new ArrayList<>();
+        long cacheHits = 0;
+
+        for (com.mali.smartbudget.dto.TransactionDto dto : dtos) {
+            String finalCategory     = dto.category();
+            boolean finalSubscription = dto.isSubscription();
+
+            try {
+                java.util.Optional<MerchantCacheService.CachedResult> cached =
+                        merchantCacheService.lookup(dto.description());
+
+                if (cached.isPresent()) {
+                    finalCategory     = cached.get().category();
+                    finalSubscription = cached.get().isSubscription();
+                    cacheHits++;
+                } else {
+                    merchantCacheService.learn(dto.description(), finalCategory, finalSubscription);
+                }
+            } catch (Exception e) {
+                log.warn("[cache] Merchant cache hatası '{}' — Java tespiti kullanılıyor: {}",
+                        dto.description(), e.getMessage());
+            }
+
+            com.mali.smartbudget.model.Category categoryEnum =
+                    categorizationService.categorize(dto.description(), finalCategory);
+
+            enriched.add(new com.mali.smartbudget.dto.TransactionDto(
+                    dto.date(), dto.description(), dto.amount(),
+                    finalCategory, dto.currency(), finalSubscription,
+                    dto.isInstallment(), dto.currentInstallment(), dto.totalInstallments(),
+                    categoryEnum
+            ));
+        }
+
+        dtos = enriched;
+        int total = dtos.size();
+        long hitPct = total == 0 ? 0 : Math.round(100.0 * cacheHits / total);
+        log.info("[cache] {}/{} işlem merchant cache'den çözüldü (hit oranı: %{})",
+                cacheHits, total, hitPct);
+        if (total > 0 && cacheHits == total) {
+            log.info("[cache] Tüm işlemler cache'de bulundu! " +
+                     "OpenAI yalnızca yeni merchant'lar için kullanıldı.");
+        }
+        log.info("[kategorileme] {} DTO kategorize edildi.", total);
 
         pipelineSw.stop();
         log.info("[pipeline] Extraction tamamlandı. {} DTO | toplam süre={}ms",
@@ -471,14 +447,15 @@ public class ExtractionService {
 
     /**
      * Tek bir JSON satırını (map) {@link TransactionDto}'ya dönüştürür.
+     * Kısa schema: {d, n, a, t}
      *
      * @return Geçerli DTO; zorunlu alan eksikse {@code null}
      */
     private TransactionDto mapRow(Map<String, Object> row, int index) {
-        // ── Tarih ─────────────────────────────────────────────────────────────
-        Object rawDate = row.get("date");
+        // ── Tarih (d) ─────────────────────────────────────────────────────────
+        Object rawDate = row.get("d");
         if (rawDate == null) {
-            log.debug("Satır {}: 'date' alanı null — atlandı", index);
+            log.debug("Satır {}: 'd' alanı null — atlandı", index);
             return null;
         }
         LocalDate date;
@@ -489,64 +466,118 @@ public class ExtractionService {
             return null;
         }
 
-        // ── Tutar ─────────────────────────────────────────────────────────────
-        BigDecimal amount = AmountNormalizer.normalize(row.get("amount"));
+        // ── Tutar (a) ─────────────────────────────────────────────────────────
+        BigDecimal amount = AmountNormalizer.normalize(row.get("a"));
         if (amount == null || amount.compareTo(BigDecimal.ZERO) == 0) {
-            log.debug("Satır {}: geçersiz/sıfır tutar '{}' — atlandı", index, row.get("amount"));
+            log.debug("Satır {}: geçersiz/sıfır tutar '{}' — atlandı", index, row.get("a"));
             return null;
         }
 
-        // ── Açıklama ──────────────────────────────────────────────────────────
-        String description = row.get("description") != null
-                ? row.get("description").toString().trim() : "Bilinmeyen";
+        // ── Açıklama (n) ──────────────────────────────────────────────────────
+        String description = row.get("n") != null
+                ? row.get("n").toString().trim() : "Bilinmeyen";
 
-        // ── Kategori ──────────────────────────────────────────────────────────
-        String category = row.get("category") != null
-                ? row.get("category").toString().trim() : "Diğer";
-
-        // ── Para birimi ───────────────────────────────────────────────────────
-        String currency = row.get("currency") != null
-                ? row.get("currency").toString().trim().toUpperCase() : "TRY";
-        if (currency.isEmpty()) currency = "TRY";
-
-        // ── Abonelik bayrağı ──────────────────────────────────────────────────
-        boolean isSubscription = false;
-        Object subRaw = row.get("isSubscription");
-        if (subRaw instanceof Boolean b) {
-            isSubscription = b;
-        } else if (subRaw != null) {
-            isSubscription = Boolean.parseBoolean(subRaw.toString());
-        }
-
-        // ── Taksit alanları ───────────────────────────────────────────────────
-        boolean isInstallment = false;
-        Object instRaw = row.get("isInstallment");
-        if (instRaw instanceof Boolean b) {
-            isInstallment = b;
-        } else if (instRaw != null) {
-            isInstallment = Boolean.parseBoolean(instRaw.toString());
-        }
-
-        Integer currentInstallment = null;
-        Object curRaw = row.get("currentInstallment");
-        if (curRaw instanceof Number n) {
-            currentInstallment = n.intValue();
-        } else if (curRaw != null && !curRaw.toString().equalsIgnoreCase("null")) {
-            try { currentInstallment = Integer.parseInt(curRaw.toString().trim()); }
+        // ── Taksit indeksi (t): 0=normal, N>0=currentInstallment ─────────────
+        int t = 0;
+        Object tRaw = row.get("t");
+        if (tRaw instanceof Number num) {
+            t = num.intValue();
+        } else if (tRaw != null) {
+            try { t = Integer.parseInt(tRaw.toString().trim()); }
             catch (NumberFormatException ignored) {}
         }
+        boolean isInstallment = t > 0;
+        Integer currentInstallment = isInstallment ? t : null;
 
-        Integer totalInstallments = null;
-        Object totRaw = row.get("totalInstallments");
-        if (totRaw instanceof Number n) {
-            totalInstallments = n.intValue();
-        } else if (totRaw != null && !totRaw.toString().equalsIgnoreCase("null")) {
-            try { totalInstallments = Integer.parseInt(totRaw.toString().trim()); }
-            catch (NumberFormatException ignored) {}
-        }
+        // ── Java tarafı kategori ve abonelik tespiti ──────────────────────────
+        String category = detectGranularCategory(description);
+        boolean isSubscription = detectSubscription(description);
 
-        return new TransactionDto(date, description, amount, category, currency,
-                isSubscription, isInstallment, currentInstallment, totalInstallments, null);
+        return new TransactionDto(date, description, amount, category, "TRY",
+                isSubscription, isInstallment, currentInstallment, null, null);
+    }
+
+    /**
+     * Açıklamaya göre granüler Türkçe kategori döner.
+     * CategorizationService.mapLlmLabel() ile uyumlu etiketler üretir.
+     */
+    String detectGranularCategory(String description) {
+        if (description == null || description.isBlank()) return "Diğer";
+        // İ (U+0130) → i önce replace edilmeli; Locale.ROOT bunu "i̇" yapıyor
+        String lower = description.replace('İ', 'i').toLowerCase(Locale.ROOT);
+
+        if (lower.contains("migros") || lower.contains("bim") || lower.contains("a101")
+                || lower.contains("şok") || lower.contains("carrefour") || lower.contains("hakmar")
+                || lower.contains("macro") || lower.contains("kiler") || lower.contains("metro")
+                || lower.contains("market") || lower.contains("manav") || lower.contains("kasap")
+                || lower.contains("fırın") || lower.contains("ekmek") || lower.contains("bakkal")
+                || lower.contains("kuruyemiş") || lower.contains("gıda") || lower.contains("pazar")
+                || lower.contains("sebze") || lower.contains("meyve")) return "Market";
+
+        if (lower.contains("starbucks") || lower.contains("gloria") || lower.contains("kahve")
+                || lower.contains("espresso") || lower.contains("cafe") || lower.contains("kafe")
+                || lower.contains("coffee")) return "Kafe";
+
+        if (lower.contains("restoran") || lower.contains("restaurant") || lower.contains("burger")
+                || lower.contains("pizza") || lower.contains("döner") || lower.contains("kebap")
+                || lower.contains("balık") || lower.contains("mcdonald") || lower.contains("kfc")
+                || lower.contains("popeyes") || lower.contains("subway") || lower.contains("noodle")
+                || lower.contains("yemek")) return "Restoran";
+
+        if (lower.contains("iett") || lower.contains("metrobüs") || lower.contains("dolmuş")
+                || lower.contains("taksi") || lower.contains("uber") || lower.contains("bitaksi")
+                || lower.contains("vapur") || lower.contains("marmaray") || lower.contains("tcdd")
+                || lower.contains("otobüs") || lower.contains("ukome")) return "Ulaşım";
+
+        if (lower.contains("shell") || lower.contains("opet") || lower.contains("total")
+                || lower.contains("petrol") || lower.contains("benzin") || lower.contains("akaryakıt")
+                || lower.contains("lpg") || (lower.contains("bp") && lower.length() <= 6)) return "Akaryakıt";
+
+        if (lower.contains("iski") || lower.contains("igdas") || lower.contains("igdaş")
+                || lower.contains("ayedas") || lower.contains("bedas") || lower.contains("elektrik")
+                || lower.contains("doğalgaz") || lower.contains("turkcell") || lower.contains("vodafone")
+                || lower.contains("türk telekom") || lower.contains("internet") || lower.contains("fatura")) return "Fatura";
+
+        if (lower.contains("kira") || lower.contains("aidat")) return "Kira";
+
+        if (lower.contains("eczane") || lower.contains("pharmacy") || lower.contains("hastane")
+                || lower.contains("klinik") || lower.contains("doktor") || lower.contains("diş")
+                || lower.contains("optik") || lower.contains("laborat")) return "Sağlık";
+
+        if (lower.contains("netflix") || lower.contains("spotify") || lower.contains("youtube")
+                || lower.contains("disney") || lower.contains("sinema") || lower.contains("tiyatro")
+                || lower.contains("konser") || lower.contains("amazon prime") || lower.contains("todtv")) return "Eğlence";
+
+        if (lower.contains("apple") || lower.contains("samsung") || lower.contains("mediamarkt")
+                || lower.contains("vatan") || lower.contains("teknosa") || lower.contains("arçelik")
+                || lower.contains("beko") || lower.contains("amazon") || lower.contains("bilgisayar")
+                || lower.contains("trendyol")) return "Teknoloji";
+
+        if (lower.contains("zara") || lower.contains("lcwaikiki") || lower.contains("lc waikiki")
+                || lower.contains("h&m") || lower.contains("mavi") || lower.contains("koton")
+                || lower.contains("defacto") || lower.contains("adidas") || lower.contains("nike")
+                || lower.contains("giyim") || lower.contains("ayakkabı") || lower.contains("tekstil")) return "Giyim";
+
+        if (lower.contains("üniversite") || lower.contains("kurs") || lower.contains("kitap")
+                || lower.contains("udemy") || lower.contains("coursera") || lower.contains("okul")
+                || lower.contains("dershane")) return "Eğitim";
+
+        if (lower.contains("sigorta") || lower.contains("kasko") || lower.contains("emeklilik")
+                || lower.contains("dask")) return "Sigorta";
+
+        return "Diğer";
+    }
+
+    /** Açıklama bilinen dijital abonelik servislerinden birine aitse {@code true} döner. */
+    boolean detectSubscription(String description) {
+        if (description == null || description.isBlank()) return false;
+        String lower = description.replace('İ', 'i').toLowerCase(Locale.ROOT);
+        return lower.contains("netflix") || lower.contains("spotify") || lower.contains("youtube")
+                || lower.contains("appletv") || lower.contains("apple tv") || lower.contains("disney")
+                || lower.contains("amazon prime") || lower.contains("icloud")
+                || lower.contains("google one") || lower.contains("googleone")
+                || lower.contains("adobe") || lower.contains("office365") || lower.contains("office 365")
+                || lower.contains("todtv") || lower.contains("üyelik");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
