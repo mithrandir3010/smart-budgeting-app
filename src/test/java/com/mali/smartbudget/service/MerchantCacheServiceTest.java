@@ -261,4 +261,55 @@ class MerchantCacheServiceTest {
 
         assertThat(service.count()).isEqualTo(42L);
     }
+
+    // =========================================================================
+    // isKnown — Read-only Router Kontrolü
+    // =========================================================================
+
+    @Nested
+    @DisplayName("isKnown — Okuma-only Kontrol")
+    class IsKnown {
+
+        @Test
+        @DisplayName("Cache'deki 'Migros' pattern → isKnown('Migros') true döner")
+        void isKnown_exactMatch_returnsTrue() {
+            when(repository.findAll()).thenReturn(List.of(migros));
+
+            assertThat(service.isKnown("Migros")).isTrue();
+        }
+
+        @Test
+        @DisplayName("Cache'deki 'Netflix' → isKnown('Netflix.com') true döner (contains match)")
+        void isKnown_containsMatch_returnsTrue() {
+            when(repository.findAll()).thenReturn(List.of(netflix));
+
+            assertThat(service.isKnown("Netflix.com")).isTrue();
+        }
+
+        @Test
+        @DisplayName("Bilinmeyen merchant → isKnown false döner")
+        void isKnown_unknownMerchant_returnsFalse() {
+            when(repository.findAll()).thenReturn(List.of(migros, netflix));
+
+            assertThat(service.isKnown("XYZ Bilinmeyen")).isFalse();
+        }
+
+        @Test
+        @DisplayName("null veya boş description → isKnown false döner, repository'ye gidilmez")
+        void isKnown_nullOrBlank_returnsFalse() {
+            assertThat(service.isKnown(null)).isFalse();
+            assertThat(service.isKnown("   ")).isFalse();
+            verifyNoInteractions(repository);
+        }
+
+        @Test
+        @DisplayName("isKnown hitCount'u artırmaz — save() çağrılmaz")
+        void isKnown_doesNotIncrementHitCount() {
+            when(repository.findAll()).thenReturn(List.of(migros));
+
+            service.isKnown("Migros");
+
+            verify(repository, never()).save(any());
+        }
+    }
 }

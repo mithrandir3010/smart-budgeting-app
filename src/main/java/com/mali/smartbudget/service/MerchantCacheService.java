@@ -110,6 +110,23 @@ public class MerchantCacheService {
         return repository.count();
     }
 
+    /**
+     * Read-only pattern check — hitCount yan etkisi yoktur.
+     * Transaction Router tarafından güven skoru hesaplamak için kullanılır.
+     *
+     * @param description kontrol edilecek merchant adı
+     * @return cache'de eşleşen bir kayıt varsa {@code true}
+     */
+    @Transactional(readOnly = true)
+    public boolean isKnown(String description) {
+        if (description == null || description.isBlank()) return false;
+        String needle = normalize(description.trim());
+        return repository.findAll().stream().anyMatch(entry -> {
+            String pat = normalize(entry.getPattern());
+            return needle.equals(pat) || needle.contains(pat) || pat.contains(needle);
+        });
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Yardımcı
     // ─────────────────────────────────────────────────────────────────────────

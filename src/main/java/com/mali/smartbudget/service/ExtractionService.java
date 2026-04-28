@@ -28,6 +28,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -145,6 +146,27 @@ public class ExtractionService {
             "(\\d{1,3}(?:\\.\\d{3})*,\\d{2})\\s+TL.lik\\s+i\\u015flemin\\s+(\\d{1,2})\\s*/\\s*(\\d{1,3})\\s+taksidi",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
+
+    // ── Transaction Router pattern'ları ──────────────────────────────────────
+
+    /**
+     * Standart tek-satır Türk banka formatı: dd.MM.yyyy AÇIKLAMA TUTAR[,CC] [TL]
+     * HIGH confidence kontrolünün ilk geçidi.
+     */
+    private static final Pattern HIGH_CONF_LINE = Pattern.compile(
+            "^(\\d{1,2}\\.\\d{1,2}\\.\\d{4})\\s+(\\S.*?)\\s+(\\d{1,3}(?:\\.\\d{3})*,\\d{2})(?:\\s+TL)?\\s*$"
+    );
+
+    /** "X TL'lik işlemin N / M taksidi" — kesin taksit alt satırı işareti. */
+    private static final Pattern TAKSIT_SUBLINE_MARKER = Pattern.compile(
+            "TL.lik\\s+i\\u015flemin", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    /** Aynı satırda taksit sayacı: "400,00 / 3" — karmaşık satır işareti. */
+    private static final Pattern TAKSIT_COUNT_IN_LINE = Pattern.compile(",\\d{2}\\s*/\\s*\\d+");
+
+    /** POS terminal / referans kodu: açıklamada 6+ rakam → LOW confidence. */
+    private static final Pattern POS_CODE = Pattern.compile("\\d{6,}");
 
     /** Kalan taksit sayısı suffix: "/ 11", "/ 2" */
     private static final Pattern REMAINING_COUNT = Pattern.compile("/\\s*\\d{1,3}\\b");
@@ -270,35 +292,88 @@ public class ExtractionService {
         log.debug("[1/5] Temiz metin (ilk 800 karakter):\n{}",
                 cleanText.substring(0, Math.min(800, cleanText.length())));
 
-        // ── [2/5] Chunk'lara bölme & sıralı LLM çağrıları ──────────────────
-        List<String> chunks = splitIntoChunks(cleanText, LINES_PER_CHUNK);
-        log.info("[2/5] Metin {} chunk'a bölündü ({} satır/chunk, {} satır örtüşme). Toplam: {} satır.",
-                chunks.size(), LINES_PER_CHUNK, CHUNK_OVERLAP_LINES, countLines(cleanText));
+        // ── [2/5] Transaction Router — HIGH confidence → LOCAL (0 token), LOW → LLM ──
+        String[]             allLines  = cleanText.split("\n", -1);
+        List<TransactionDto> localDtos = new ArrayList<>();
+        List<String>         llmLines  = new ArrayList<>();
 
-        Set<String>          seen    = new HashSet<>();
-        List<TransactionDto> allDtos = new ArrayList<>();
+        for (int i = 0; i < allLines.length; i++) {
+            String line     = allLines[i].trim();
+            String nextLine = (i + 1 < allLines.length) ? allLines[i + 1].trim() : "";
+            if (line.isBlank()) continue;
 
-        for (int i = 0; i < chunks.size(); i++) {
-            String chunk    = chunks.get(i);
-            int    chunkIdx = i + 1;
-            log.info("[chunk-{}/{}] İşleniyor... {} satır",
-                    chunkIdx, chunks.size(), countLines(chunk));
+            if (isHighConfidence(line, nextLine)) {
+                Optional<TransactionDto> local = parseLineLocally(line);
+                if (local.isPresent()) {
+                    localDtos.add(local.get());
+                    continue;
+                }
+                // local parse failed despite high confidence → fall through to LLM
+            }
 
-            String               rawJson   = callLlmForChunk(chunk, chunkIdx, chunks.size());
-            List<TransactionDto> chunkDtos = parseChunk(rawJson, chunkIdx);
-
-            int added = 0;
-            for (TransactionDto dto : chunkDtos) {
-                if (seen.add(dtoKey(dto))) {
-                    allDtos.add(dto);
-                    added++;
+            if (isTransactionCandidate(line)) {
+                llmLines.add(line);
+                // Taksit alt satırını bağlamı koruyarak birlikte gönder
+                if (TAKSIT_SUBLINE_MARKER.matcher(nextLine).find()) {
+                    llmLines.add(nextLine);
+                    i++;
                 }
             }
-            log.info("[chunk-{}/{}] {} işlem ayıklandı, {} yeni eklendi ({} mükerrer atlandı).",
-                    chunkIdx, chunks.size(), chunkDtos.size(), added, chunkDtos.size() - added);
+        }
+        log.info("[router] LOCAL: {} satır (0 token) | LLM aday: {} satır.",
+                localDtos.size(), llmLines.size());
+
+        Set<String>          seen    = new HashSet<>();
+        List<TransactionDto> allDtos = new ArrayList<>(localDtos);
+        for (TransactionDto dto : localDtos) seen.add(dtoKey(dto));
+        int llmDtoCount = 0;
+
+        // LLM'e gönderilecek metin: aday satırlar varsa onlar, yoksa tam metin fallback
+        final String llmText;
+        final boolean runLlm;
+        if (!llmLines.isEmpty()) {
+            llmText = String.join("\n", llmLines);
+            runLlm  = true;
+        } else if (localDtos.isEmpty()) {
+            // Hiç aday bulunamadı — olağandışı format, tam metin LLM'e
+            llmText = cleanText;
+            runLlm  = true;
+            log.info("[router] Hiç aday bulunamadı — tam metin LLM'e gönderiliyor (fallback).");
+        } else {
+            llmText = "";
+            runLlm  = false;
+            log.info("[router] Tüm satırlar yerel olarak çözüldü — LLM çağrısı atlandı.");
         }
 
-        log.info("[2/5] Tüm chunk'lar işlendi. Toplam benzersiz DTO: {}", allDtos.size());
+        if (runLlm) {
+            List<String> chunks = splitIntoChunks(llmText, LINES_PER_CHUNK);
+            log.info("[2/5] LLM: {} chunk ({} satır/chunk, {} satır örtüşme).",
+                    chunks.size(), LINES_PER_CHUNK, CHUNK_OVERLAP_LINES);
+
+            for (int i = 0; i < chunks.size(); i++) {
+                String chunk    = chunks.get(i);
+                int    chunkIdx = i + 1;
+                log.info("[chunk-{}/{}] LLM gönderiliyor... {} satır",
+                        chunkIdx, chunks.size(), countLines(chunk));
+
+                String               rawJson   = callLlmForChunk(chunk, chunkIdx, chunks.size());
+                List<TransactionDto> chunkDtos = parseChunk(rawJson, chunkIdx);
+
+                int added = 0;
+                for (TransactionDto dto : chunkDtos) {
+                    if (seen.add(dtoKey(dto))) {
+                        allDtos.add(dto);
+                        added++;
+                        llmDtoCount++;
+                    }
+                }
+                log.info("[chunk-{}/{}] {} işlem, {} yeni ({} mükerrer atlandı).",
+                        chunkIdx, chunks.size(), chunkDtos.size(), added, chunkDtos.size() - added);
+            }
+        }
+
+        log.info("[router] Özet: {} LOCAL (0 token) + {} LLM (ücretli) = {} toplam benzersiz DTO.",
+                localDtos.size(), llmDtoCount, allDtos.size());
 
         if (allDtos.isEmpty()) {
             log.error("[2/5] Hiçbir geçerli işlem çıkarılamadı.");
@@ -557,6 +632,97 @@ public class ExtractionService {
                 || lower.contains("google one") || lower.contains("googleone")
                 || lower.contains("adobe") || lower.contains("office365") || lower.contains("office 365")
                 || lower.contains("todtv") || lower.contains("üyelik");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Transaction Router
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Bir satırın LOCAL olarak (LLM'siz) parse edilip edilemeyeceğini belirler.
+     *
+     * <p>Tüm kriterler karşılanmalı:
+     * <ol>
+     *   <li>Standart {@code dd.MM.yyyy açıklama tutar} formatı ({@link #HIGH_CONF_LINE})</li>
+     *   <li>Aynı satırda taksit sayacı yok ({@link #TAKSIT_COUNT_IN_LINE})</li>
+     *   <li>Bir sonraki satır taksit alt satırı değil ({@link #TAKSIT_SUBLINE_MARKER})</li>
+     *   <li>Açıklama ≤ 50 karakter, POS terminal kodu yok, içinde başka tutar yok</li>
+     *   <li>Tarih geçerli aralıkta (2020–2030)</li>
+     *   <li>Merchant cache'de bilinen bir kayıt var ({@link MerchantCacheService#isKnown})</li>
+     * </ol>
+     */
+    private boolean isHighConfidence(String line, String nextLine) {
+        Matcher m = HIGH_CONF_LINE.matcher(line);
+        if (!m.matches()) return false;
+
+        if (TAKSIT_COUNT_IN_LINE.matcher(line).find()) return false;
+        if (TAKSIT_SUBLINE_MARKER.matcher(nextLine).find()) return false;
+
+        String description = m.group(2).trim();
+        if (description.length() > 50) return false;
+        if (POS_CODE.matcher(description).find()) return false;
+        // Açıklama grubunda başka bir Türk tutarı varsa satır karmaşık → LLM
+        if (TURKISH_AMOUNT_IN_LINE.matcher(description).find()) return false;
+
+        try {
+            LocalDate date = parseDate(m.group(1));
+            if (date.getYear() < 2020 || date.getYear() > 2030) return false;
+        } catch (Exception e) {
+            return false;
+        }
+
+        // Merchant cache'de bilinen bir kayıt olmalı (read-only, hitCount etkilenmez)
+        return merchantCacheService.isKnown(description);
+    }
+
+    /**
+     * HIGH confidence satırını LLM'siz parse eder.
+     * Parse başarısız olursa {@link Optional#empty()} döner ve satır LLM'e yönlendirilir.
+     */
+    private Optional<TransactionDto> parseLineLocally(String line) {
+        Matcher m = HIGH_CONF_LINE.matcher(line);
+        if (!m.matches()) return Optional.empty();
+        try {
+            LocalDate  date        = parseDate(m.group(1));
+            BigDecimal amount      = AmountNormalizer.normalize(m.group(3));
+            if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) return Optional.empty();
+
+            String  description    = cleanLocalDescription(m.group(2).trim());
+            String  category       = detectGranularCategory(description);
+            boolean isSubscription = detectSubscription(description);
+
+            return Optional.of(new TransactionDto(
+                    date, description, amount, category, "TRY",
+                    isSubscription, false, null, null, null));
+        } catch (Exception e) {
+            log.debug("[local-parser] Parse başarısız: '{}' — {}", line, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Satırın LLM chunk'ına dahil edilmeye değer bir işlem adayı olup olmadığını kontrol eder.
+     * Başlık, toplam/bakiye ve taksit alt satırları gibi açık non-transaction satırlar elenir.
+     */
+    private boolean isTransactionCandidate(String line) {
+        if (line.length() < 8) return false;
+        if (TAKSIT_SUBLINE_MARKER.matcher(line).find()) return false;
+        if (!TURKISH_AMOUNT_IN_LINE.matcher(line).find()) return false;
+        return HIGH_CONF_LINE.matcher(line).matches()
+                || TURKISH_DATE_IN_LINE.matcher(line).find()
+                || line.matches("^\\d{4}[-/]\\d{2}[-/]\\d{2}.*")
+                || line.matches("^\\d{1,2}[./]\\d{1,2}[./]\\d{4}.*");
+    }
+
+    /**
+     * Yerel parse edilen açıklamadan ülke/şebeke kodlarını ve sondaki puan değerlerini temizler.
+     * (Tutar ve tarih regex tarafından ayrıldığından burada yalnızca artefaktlar giderilir.)
+     */
+    private String cleanLocalDescription(String raw) {
+        String s = COUNTRY_CODE.matcher(raw).replaceAll(" ").trim();
+        s = TRAILING_INT.matcher(s).replaceAll("").trim();
+        s = s.replaceAll("\\s{2,}", " ").trim();
+        return s.isEmpty() ? "Bilinmeyen" : s;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

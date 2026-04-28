@@ -849,4 +849,89 @@ class ExtractionServiceTest {
         assertThat(extractionService.detectSubscription("Shell")).isFalse();
         assertThat(extractionService.detectSubscription(null)).isFalse();
     }
+
+    // =========================================================================
+    // Transaction Router — birim testleri
+    // =========================================================================
+
+    @Test
+    @DisplayName("Router: bilinen merchant + standart format → LOCAL parse, LLM çağrılmaz")
+    void extractDtos_highConfidenceLine_parsedLocallyNoLlm() throws IOException {
+        when(pdfService.extractText(any())).thenReturn("15.04.2026 Migros 100,00");
+        when(merchantCacheService.isKnown(anyString())).thenReturn(true);
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        verify(chatLanguageModel, never()).generate(anyString());
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).description()).isEqualTo("Migros");
+        assertThat(dtos.get(0).amount()).isEqualByComparingTo("100.00");
+        assertThat(dtos.get(0).category()).isEqualTo("Market");
+        assertThat(dtos.get(0).currency()).isEqualTo("TRY");
+    }
+
+    @Test
+    @DisplayName("Router: cache'de bilinmeyen merchant → LLM'e gönderilir (isKnown false)")
+    void extractDtos_unknownMerchant_routedToLlm() throws IOException {
+        String json = "[{\"d\":\"2026-04-15\",\"n\":\"XYZ Bilinmeyen\",\"a\":100.00,\"t\":0}]";
+        when(pdfService.extractText(any())).thenReturn("14 Nisan 2026 XYZ Bilinmeyen 100,00");
+        doReturn(json).when(chatLanguageModel).generate(anyString());
+        // isKnown() not mocked → returns false (Mockito default)
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        verify(chatLanguageModel, atLeastOnce()).generate(anyString());
+        assertThat(dtos).hasSize(1);
+        assertThat(dtos.get(0).description()).isEqualTo("XYZ Bilinmeyen");
+    }
+
+    @Test
+    @DisplayName("Router: bilinen merchant ama sonraki satır taksit → HIGH confidence değil, LLM'e gider")
+    void extractDtos_knownMerchantWithInstallment_routedToLlm() throws IOException {
+        String pdfText = "15.04.2026 Turkcell 412,53\n1.237,60 TL'lik işlemin 3 / 3 taksidi";
+        String llmJson = "[{\"d\":\"2026-04-15\",\"n\":\"Turkcell\",\"a\":412.53,\"t\":3}]";
+        when(pdfService.extractText(any())).thenReturn(pdfText);
+        // isKnown NOT mocked: taksit sub-line check fails before reaching isKnown
+        doReturn(llmJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        verify(chatLanguageModel, atLeastOnce()).generate(anyString());
+        assertThat(dtos).hasSizeGreaterThanOrEqualTo(1);
+        assertThat(dtos.stream().anyMatch(TransactionDto::isInstallment)).isTrue();
+    }
+
+    @Test
+    @DisplayName("Router: LOCAL ve LLM sonuçları mükerrer kayıt oluşturmadan birleştirilir")
+    void extractDtos_localAndLlmResultsMergedWithoutDuplicates() throws IOException {
+        // İki satır: biri HIGH conf (Migros), biri LOW conf (Türkçe tarih formatı)
+        String pdfText = "15.04.2026 Migros 100,00\n14 Nisan 2026 Netflix 79,99";
+        // LLM aynı Migros'u da döndürse mükerrer olmamalı
+        String llmJson = "[{\"d\":\"2026-04-15\",\"n\":\"Migros\",\"a\":100.00,\"t\":0}," +
+                          "{\"d\":\"2026-04-14\",\"n\":\"Netflix\",\"a\":79.99,\"t\":0}]";
+        when(pdfService.extractText(any())).thenReturn(pdfText);
+        when(merchantCacheService.isKnown("Migros")).thenReturn(true);
+        doReturn(llmJson).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        // Migros LOCAL'den, Netflix LLM'den — toplam 2, mükerrer Migros elendi
+        assertThat(dtos).hasSize(2);
+        assertThat(dtos.stream().map(TransactionDto::description))
+                .containsExactlyInAnyOrder("Migros", "Netflix");
+    }
+
+    @Test
+    @DisplayName("Router: POS kodu içeren satır HIGH confidence değil → LLM'e gider")
+    void extractDtos_posCodeInDescription_routedToLlm() throws IOException {
+        String json = "[{\"d\":\"2026-04-15\",\"n\":\"KFC\",\"a\":65.00,\"t\":0}]";
+        when(pdfService.extractText(any())).thenReturn("15.04.2026 KFC 0012345678 65,00");
+        // isKnown NOT mocked: POS_CODE check fails before reaching isKnown
+        doReturn(json).when(chatLanguageModel).generate(anyString());
+
+        List<TransactionDto> dtos = extractionService.extractDtos(dummyFile);
+
+        verify(chatLanguageModel, atLeastOnce()).generate(anyString());
+        assertThat(dtos).hasSize(1);
+    }
 }
