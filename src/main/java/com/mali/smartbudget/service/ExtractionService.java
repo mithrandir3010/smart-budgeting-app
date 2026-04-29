@@ -69,22 +69,43 @@ public class ExtractionService {
             Schema — each object exactly:
             {"d":"YYYY-MM-DD","n":"Merchant Name","a":1234.56,"t":0}
 
-            d = date ISO 8601 (15.03.2026 → "2026-03-15")
-            n = merchant name only; strip POS ID/ref/terminal/branch/city; fix casing; keep ğşıçöü; MKT→Market, REST→Restoran, PETROL→Akaryakıt
+            d = date ISO 8601 (15.03.2026 → "2026-03-15", 15/03/2026 → "2026-03-15")
+            n = merchant name only; strip POS ID/ref/terminal/branch/city suffix; fix casing; keep ğşıçöü; MKT→Market, REST→Restoran, PETROL→Akaryakıt
             a = amount as plain number, dot-decimal only
-                1.250,00 TL → 1250.00 | 12.480,37 → 12480.37 | 89,90 → 89.90
+                Turkish format:  1.250,00 TL → 1250.00 | 89,90 → 89.90
+                English format:  1,100.00 → 1100.00 | 793.55 → 793.55
                 WRONG: 1.250.00  WRONG: 1.250,00  WRONG: "1250.00"  RIGHT: 1250.00
             t = 0 for normal transactions.
-                If the line immediately BELOW the transaction reads "X TL'lik işlemin N / M taksidi",
-                set t=N (current installment number). Ignore "amount / count" on the same line.
+                İş Bankası taksit: "512,23 2/6 taksidi (3.073,40)" → t=2 (N/M taksidi → t=N)
+                Halkbank taksit:   "490.23  1960.94/6-02.Taksit" → t=2
+                Yapı Kredi taksit: next line "X TL'lik işlemin N / M taksidi" → t=N
 
-            Skip: balance rows, IBAN transfers, page headers/footers, VAT/fee lines, incoming transfers,
-                  refunds, rows containing "TAKSİTLENDİRME İŞLEM FAİZİ". Max 150 transactions.
+            Skip: balance rows, IBAN transfers, page headers/footers, fee-only lines (FATURA ÖDEME ÜCRETI),
+                  account payment rows (HESAPTAN AKTARIM, Hesaptan Ödeme), refunds (+prefix),
+                  rows containing "TAKSİTLENDİRME İŞLEM FAİZİ". Max 150 transactions.
 
-            Examples:
-            "15.03.2026 MIGROS 1.250,00 TL" → {"d":"2026-03-15","n":"Migros","a":1250.00,"t":0}
+            --- Yapı Kredi (WorldCard) examples — date "DD MonthName YYYY", Turkish decimal, city+TR/TU then amount, trailing int = puan (ignore) ---
+            "06 Mart 2026 DRAGON SARKUTERI VE TURISTANBUL TU 800,00" → {"d":"2026-03-06","n":"Dragon Sarküteri","a":800.00,"t":0}
+            "06 Mart 2026 KADIKÖY İSTANBUL TR 390,00 6" → {"d":"2026-03-06","n":"Kadıköy","a":390.00,"t":0}
             "14 Ocak 2026 TURKCELL 412,53\\n1.237,60 TL'lik işlemin 3 / 3 taksidi" → {"d":"2026-01-14","n":"Turkcell","a":412.53,"t":3}
-            "23 Ocak 2026 İYZİCO/ERCAN CANDAN 400,00 1.200,00 / 3\\n2.400,00 TL'lik işlemin 3 / 6 taksidi" → {"d":"2026-01-23","n":"İyzico/Ercan Candan","a":400.00,"t":3}
+            "14 Mart 2026 AVIS.COM.TR ISTANBUL TR 2.501,15 12.505,75 / 5 1.501\\n15.006,90 TL'lik işlemin 1 / 6 taksidi" → {"d":"2026-03-14","n":"Avis","a":2501.15,"t":1}
+            "09 Mart 2026 ÖDEME-İNTERNET BANKACILIĞI +26.237,80" → SKIP (payment row)
+            "17 Mart 2026 TAKSİTLENDİRME İŞLEM FAİZİ 87,45" → SKIP (interest fee, not a merchant)
+
+            --- Halkbank (Paraf) examples — date DD/MM/YYYY, amount English decimal, trailing city ---
+            "14/03/2026 BAYRAMPAŞA MİGROS İSTANBUL 793.55  1.98" → {"d":"2026-03-14","n":"Migros","a":793.55,"t":0}
+            "30/03/2026 GOOGLE *YouTubePremI LONDON 60.65  0.00" → {"d":"2026-03-30","n":"YouTube Premium","a":60.65,"t":0}
+            "01/03/2026 İYZİCO /AMAZON.COM.T ISTANBUL 490.23  1960.94/6-\\n02.Taksit 0.00" → {"d":"2026-03-01","n":"Amazon","a":490.23,"t":2}
+            "21/03/2026 MOOD TRİO BEACH AYDIN 1,100.00  0.00" → {"d":"2026-03-21","n":"Mood Trio Beach","a":1100.00,"t":0}
+            "20/03/2026 Hesaptan Ödeme - Teşekkür Ederiz - + 8,925.44  0.00" → SKIP (payment row)
+
+            --- İş Bankası (Maximum) examples — date DD/MM/YYYY, amount Turkish decimal, CITY TR suffix ---
+            "12/03/2026 TARIHI IZNIK FIRINI BURSA TR 70,00" → {"d":"2026-03-12","n":"Tarihi İznik Fırını","a":70.00,"t":0}
+            "24/03/2026 SURA AKARYAKIT BURSA TR 1.000,00" → {"d":"2026-03-24","n":"Sura Akaryakıt","a":1000.00,"t":0}
+            "14/03/2026 IYZICO/AMAZON TURKEY PE ISTANBUL TR 512,23 2/6 taksidi (3.073,40)" → {"d":"2026-03-14","n":"Amazon","a":512.23,"t":2}
+            "27/03/2026 WWW. GIB.GOV.TR BURSA TR 953,16 3/3 taksidi (2.859,50)" → {"d":"2026-03-27","n":"GIB Vergi","a":953.16,"t":3}
+            "12/03/2026 IGDAS-ISTANBUL GAZ DAGI FATURA ÖDEME ÜCRETI 31,16" → SKIP (service fee)
+            "20/03/2026 2225-392377 HESAPTAN AKTARIM 2225 İNTERAKTİF -14.851,98" → SKIP (payment)
 
             Statement:
             %s
@@ -187,6 +208,52 @@ public class ExtractionService {
     /** Türk formatı tutar: "412,53", "1.765,83", "2.501,15" */
     private static final Pattern TURKISH_AMOUNT_IN_LINE = Pattern.compile(
             "\\b(\\d{1,3}(?:\\.\\d{3})*,\\d{2})\\b"
+    );
+
+    /** İngiliz/US formatı tutar: "490.23", "1,100.00", "6,750.00" (Halkbank) */
+    private static final Pattern ENGLISH_AMOUNT_IN_LINE = Pattern.compile(
+            "\\b(\\d{1,3}(?:,\\d{3})*\\.\\d{2})\\b"
+    );
+
+    // ── Banka tipine özgü HIGH CONF pattern'ları ──────────────────────────────
+
+    /**
+     * Halkbank (Paraf): DD/MM/YYYY AÇIKLAMA(+ŞEHİR) ENG_TUTAR  PARAFPARA
+     * Örnek: "14/03/2026 BAYRAMPAŞA MİGROS İSTANBUL 793.55  1.98"
+     */
+    private static final Pattern HIGH_CONF_HALKBANK = Pattern.compile(
+            "^(\\d{2}/\\d{2}/\\d{4})\\s+(.+)\\s+(\\d{1,3}(?:,\\d{3})*\\.\\d{2})\\s{2,}\\d+\\.\\d{2}\\s*$"
+    );
+
+    /**
+     * İş Bankası (Maximum): DD/MM/YYYY AÇIKLAMA ŞEHİR TR TÜRK_TUTAR [MAXIPUAN]
+     * Örnek: "11/03/2026 IDRIS DERE BURSA TR 150,00"
+     * Örnek: "11/03/2026 BIM AS T004 TOPKAPI / I BURSA TR 309,52 0,05"
+     */
+    private static final Pattern HIGH_CONF_ISBANK = Pattern.compile(
+            "^(\\d{2}/\\d{2}/\\d{4})\\s+(.+)\\s+(\\d{1,3}(?:\\.\\d{3})*,\\d{2})(?:\\s+\\d{1,3},\\d{2})?\\s*$"
+    );
+
+    /**
+     * Yapı Kredi (WorldCard): "DD MonthName YYYY AÇIKLAMA [ŞEHİR TR/TU] TUTAR [PUAN]"
+     * Örnek: "06 Mart 2026 MİGROS KADIKÖY İSTANBUL TR 220,00"
+     * Örnek: "17 Mart 2026 IPEK KESTANE BURSA TR 2.850,00 855"  (855 = puan)
+     */
+    private static final Pattern HIGH_CONF_YAPIKREDI = Pattern.compile(
+            "^(\\d{2}\\s+(?:ocak|\\u015fubat|mart|nisan|may\\u0131s|haziran|" +
+            "temmuz|a\\u011fustos|eyl\\u00fcl|ekim|kas\\u0131m|aral\\u0131k)\\s+\\d{4})" +
+            "\\s+(.+?)\\s+(\\d{1,3}(?:\\.\\d{3})*,\\d{2})(?:\\s+\\d{1,5})?\\s*$",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
+    /** İş Bankası taksit bilgisi: "2/6 taksidi (3.073,40)" aynı satırda */
+    private static final Pattern ISBANK_TAKSIT_IN_LINE = Pattern.compile(
+            "\\d+/\\d+\\s+taksidi", Pattern.CASE_INSENSITIVE
+    );
+
+    /** İş Bankası/Halkbank tarih: DD/MM/YYYY ile başlayan satır */
+    private static final Pattern SLASH_DATE_LINE = Pattern.compile(
+            "^\\d{2}/\\d{2}/\\d{4}\\s+"
     );
 
     private static final Map<String, Integer> TURKISH_MONTHS = Map.ofEntries(
@@ -293,6 +360,9 @@ public class ExtractionService {
                 cleanText.substring(0, Math.min(800, cleanText.length())));
 
         // ── [2/5] Transaction Router — HIGH confidence → LOCAL (0 token), LOW → LLM ──
+        BankType bankType = detectBankType(rawText);
+        log.info("[router] Tespit edilen banka: {}", bankType);
+
         String[]             allLines  = cleanText.split("\n", -1);
         List<TransactionDto> localDtos = new ArrayList<>();
         List<String>         llmLines  = new ArrayList<>();
@@ -302,8 +372,8 @@ public class ExtractionService {
             String nextLine = (i + 1 < allLines.length) ? allLines[i + 1].trim() : "";
             if (line.isBlank()) continue;
 
-            if (isHighConfidence(line, nextLine)) {
-                Optional<TransactionDto> local = parseLineLocally(line);
+            if (isHighConfidence(line, nextLine, bankType)) {
+                Optional<TransactionDto> local = parseLineLocally(line, bankType);
                 if (local.isPresent()) {
                     localDtos.add(local.get());
                     continue;
@@ -311,7 +381,7 @@ public class ExtractionService {
                 // local parse failed despite high confidence → fall through to LLM
             }
 
-            if (isTransactionCandidate(line)) {
+            if (isTransactionCandidate(line, bankType)) {
                 llmLines.add(line);
                 // Taksit alt satırını bağlamı koruyarak birlikte gönder
                 if (TAKSIT_SUBLINE_MARKER.matcher(nextLine).find()) {
@@ -635,43 +705,86 @@ public class ExtractionService {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Banka Tipi Tespiti
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private enum BankType { HALKBANK, ISBANK, YAPIKREDI, UNKNOWN }
+
+    private BankType detectBankType(String text) {
+        if (text.contains("HALKBANK") || text.contains("paraf.com.tr")
+                || text.contains("Halk Bankası"))                              return BankType.HALKBANK;
+        if (text.contains("isbank.com.tr") || text.contains("MaxiPuan")
+                || text.contains("MAXIPUAN"))                                  return BankType.ISBANK;
+        if (text.contains("YAPI ve KREDİ BANKASI") || text.contains("worldcard.com.tr")
+                || text.contains("WORLDPUAN"))                                 return BankType.YAPIKREDI;
+        return BankType.UNKNOWN;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Transaction Router
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * Bir satırın LOCAL olarak (LLM'siz) parse edilip edilemeyeceğini belirler.
-     *
-     * <p>Tüm kriterler karşılanmalı:
-     * <ol>
-     *   <li>Standart {@code dd.MM.yyyy açıklama tutar} formatı ({@link #HIGH_CONF_LINE})</li>
-     *   <li>Aynı satırda taksit sayacı yok ({@link #TAKSIT_COUNT_IN_LINE})</li>
-     *   <li>Bir sonraki satır taksit alt satırı değil ({@link #TAKSIT_SUBLINE_MARKER})</li>
-     *   <li>Açıklama ≤ 50 karakter, POS terminal kodu yok, içinde başka tutar yok</li>
-     *   <li>Tarih geçerli aralıkta (2020–2030)</li>
-     *   <li>Merchant cache'de bilinen bir kayıt var ({@link MerchantCacheService#isKnown})</li>
-     * </ol>
+     * Yapı Kredi (UNKNOWN): dd.MM.yyyy formatı + merchant cache hit gerekir.
+     * İş Bankası: dd/MM/yyyy + TR suffix + cache hit gerekir.
+     * Halkbank: dd/MM/yyyy + İngiliz tutar + ParafPara + cache hit gerekir.
      */
-    private boolean isHighConfidence(String line, String nextLine) {
+    private boolean isHighConfidence(String line, String nextLine, BankType bankType) {
+        return switch (bankType) {
+            case ISBANK    -> isIsbankHighConfidence(line, nextLine);
+            case HALKBANK  -> isHalkbankHighConfidence(line, nextLine);
+            case YAPIKREDI -> isYapiKrediHighConfidence(line, nextLine);
+            default        -> isDefaultHighConfidence(line, nextLine);
+        };
+    }
+
+    private boolean isDefaultHighConfidence(String line, String nextLine) {
         Matcher m = HIGH_CONF_LINE.matcher(line);
         if (!m.matches()) return false;
-
         if (TAKSIT_COUNT_IN_LINE.matcher(line).find()) return false;
         if (TAKSIT_SUBLINE_MARKER.matcher(nextLine).find()) return false;
-
         String description = m.group(2).trim();
         if (description.length() > 50) return false;
         if (POS_CODE.matcher(description).find()) return false;
-        // Açıklama grubunda başka bir Türk tutarı varsa satır karmaşık → LLM
         if (TURKISH_AMOUNT_IN_LINE.matcher(description).find()) return false;
-
         try {
             LocalDate date = parseDate(m.group(1));
             if (date.getYear() < 2020 || date.getYear() > 2030) return false;
-        } catch (Exception e) {
-            return false;
-        }
+        } catch (Exception e) { return false; }
+        return merchantCacheService.isKnown(description);
+    }
 
-        // Merchant cache'de bilinen bir kayıt olmalı (read-only, hitCount etkilenmez)
+    private boolean isIsbankHighConfidence(String line, String nextLine) {
+        Matcher m = HIGH_CONF_ISBANK.matcher(line);
+        if (!m.matches()) return false;
+        if (TAKSIT_COUNT_IN_LINE.matcher(line).find()) return false;
+        if (ISBANK_TAKSIT_IN_LINE.matcher(line).find()) return false;
+        if (TAKSIT_SUBLINE_MARKER.matcher(nextLine).find()) return false;
+        String rawDesc = m.group(2).trim();
+        String description = stripIsbankCitySuffix(rawDesc);
+        if (description.length() > 60) return false;
+        if (POS_CODE.matcher(description).find()) return false;
+        try {
+            LocalDate date = parseDate(m.group(1));
+            if (date.getYear() < 2020 || date.getYear() > 2030) return false;
+        } catch (Exception e) { return false; }
+        return merchantCacheService.isKnown(description);
+    }
+
+    private boolean isHalkbankHighConfidence(String line, String nextLine) {
+        Matcher m = HIGH_CONF_HALKBANK.matcher(line);
+        if (!m.matches()) return false;
+        if (TAKSIT_COUNT_IN_LINE.matcher(line).find()) return false;
+        if (TAKSIT_SUBLINE_MARKER.matcher(nextLine).find()) return false;
+        String rawDesc = m.group(2).trim();
+        String description = stripHalkbankCity(rawDesc);
+        if (description.length() > 60) return false;
+        if (POS_CODE.matcher(description).find()) return false;
+        try {
+            LocalDate date = parseDate(m.group(1));
+            if (date.getYear() < 2020 || date.getYear() > 2030) return false;
+        } catch (Exception e) { return false; }
         return merchantCacheService.isKnown(description);
     }
 
@@ -679,18 +792,25 @@ public class ExtractionService {
      * HIGH confidence satırını LLM'siz parse eder.
      * Parse başarısız olursa {@link Optional#empty()} döner ve satır LLM'e yönlendirilir.
      */
-    private Optional<TransactionDto> parseLineLocally(String line) {
+    private Optional<TransactionDto> parseLineLocally(String line, BankType bankType) {
+        return switch (bankType) {
+            case ISBANK    -> parseIsbankLineLocally(line);
+            case HALKBANK  -> parseHalkbankLineLocally(line);
+            case YAPIKREDI -> parseYapiKrediLineLocally(line);
+            default        -> parseDefaultLineLocally(line);
+        };
+    }
+
+    private Optional<TransactionDto> parseDefaultLineLocally(String line) {
         Matcher m = HIGH_CONF_LINE.matcher(line);
         if (!m.matches()) return Optional.empty();
         try {
             LocalDate  date        = parseDate(m.group(1));
             BigDecimal amount      = AmountNormalizer.normalize(m.group(3));
             if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) return Optional.empty();
-
             String  description    = cleanLocalDescription(m.group(2).trim());
             String  category       = detectGranularCategory(description);
             boolean isSubscription = detectSubscription(description);
-
             return Optional.of(new TransactionDto(
                     date, description, amount, category, "TRY",
                     isSubscription, false, null, null, null));
@@ -700,18 +820,147 @@ public class ExtractionService {
         }
     }
 
+    private Optional<TransactionDto> parseIsbankLineLocally(String line) {
+        Matcher m = HIGH_CONF_ISBANK.matcher(line);
+        if (!m.matches()) return Optional.empty();
+        try {
+            LocalDate  date        = parseDate(m.group(1));
+            BigDecimal amount      = AmountNormalizer.normalize(m.group(3));
+            if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) return Optional.empty();
+            String rawDesc     = m.group(2).trim();
+            String description = cleanLocalDescription(stripIsbankCitySuffix(rawDesc));
+            String  category       = detectGranularCategory(description);
+            boolean isSubscription = detectSubscription(description);
+            return Optional.of(new TransactionDto(
+                    date, description, amount, category, "TRY",
+                    isSubscription, false, null, null, null));
+        } catch (Exception e) {
+            log.debug("[local-parser][isbank] Parse başarısız: '{}' — {}", line, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private Optional<TransactionDto> parseHalkbankLineLocally(String line) {
+        Matcher m = HIGH_CONF_HALKBANK.matcher(line);
+        if (!m.matches()) return Optional.empty();
+        try {
+            LocalDate  date        = parseDate(m.group(1));
+            BigDecimal amount      = AmountNormalizer.normalize(m.group(3));
+            if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) return Optional.empty();
+            String rawDesc     = m.group(2).trim();
+            String description = cleanLocalDescription(stripHalkbankCity(rawDesc));
+            String  category       = detectGranularCategory(description);
+            boolean isSubscription = detectSubscription(description);
+            return Optional.of(new TransactionDto(
+                    date, description, amount, category, "TRY",
+                    isSubscription, false, null, null, null));
+        } catch (Exception e) {
+            log.debug("[local-parser][halkbank] Parse başarısız: '{}' — {}", line, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private boolean isYapiKrediHighConfidence(String line, String nextLine) {
+        Matcher m = HIGH_CONF_YAPIKREDI.matcher(line);
+        if (!m.matches()) return false;
+        if (TAKSIT_COUNT_IN_LINE.matcher(line).find()) return false;   // kalan tutar/N var → LLM
+        if (TAKSIT_SUBLINE_MARKER.matcher(nextLine).find()) return false;
+        String rawDesc = m.group(2).trim();
+        String lowerDesc = rawDesc.replace('İ', 'i').toLowerCase(Locale.ROOT);
+        if (lowerDesc.contains("ödeme-internet") || lowerDesc.contains("taksitlendirme")) return false;
+        String description = stripYapiKrediCitySuffix(rawDesc);
+        if (description.length() > 60) return false;
+        if (POS_CODE.matcher(description).find()) return false;
+        LocalDate date = extractTurkishDate(line);
+        if (date == null || date.getYear() < 2020 || date.getYear() > 2030) return false;
+        return merchantCacheService.isKnown(description);
+    }
+
+    private Optional<TransactionDto> parseYapiKrediLineLocally(String line) {
+        Matcher m = HIGH_CONF_YAPIKREDI.matcher(line);
+        if (!m.matches()) return Optional.empty();
+        try {
+            LocalDate  date        = extractTurkishDate(m.group(1));
+            if (date == null) return Optional.empty();
+            BigDecimal amount      = AmountNormalizer.normalize(m.group(3));
+            if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) return Optional.empty();
+            String rawDesc     = m.group(2).trim();
+            String description = cleanLocalDescription(stripYapiKrediCitySuffix(rawDesc));
+            String  category       = detectGranularCategory(description);
+            boolean isSubscription = detectSubscription(description);
+            return Optional.of(new TransactionDto(
+                    date, description, amount, category, "TRY",
+                    isSubscription, false, null, null, null));
+        } catch (Exception e) {
+            log.debug("[local-parser][yapikredi] Parse başarısız: '{}' — {}", line, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
     /**
      * Satırın LLM chunk'ına dahil edilmeye değer bir işlem adayı olup olmadığını kontrol eder.
-     * Başlık, toplam/bakiye ve taksit alt satırları gibi açık non-transaction satırlar elenir.
+     * Banka tipine göre farklı tutar formatları ve skip kuralları uygulanır.
      */
-    private boolean isTransactionCandidate(String line) {
+    private boolean isTransactionCandidate(String line, BankType bankType) {
         if (line.length() < 8) return false;
         if (TAKSIT_SUBLINE_MARKER.matcher(line).find()) return false;
-        if (!TURKISH_AMOUNT_IN_LINE.matcher(line).find()) return false;
+
+        boolean hasTurkishAmount = TURKISH_AMOUNT_IN_LINE.matcher(line).find();
+        boolean hasEnglishAmount = ENGLISH_AMOUNT_IN_LINE.matcher(line).find();
+        if (!hasTurkishAmount && !hasEnglishAmount) return false;
+
+        // Banka bazlı ek skip kuralları
+        if (bankType == BankType.ISBANK) {
+            // İş Bankası: servis ücreti satırlarını, hesap aktarımlarını ve negatif tutarları atla
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.contains("fatura ödeme ücreti")) return false;
+            if (lower.contains("hesaptan aktarim"))    return false;
+            if (lower.contains("maxipuan ilave"))      return false;
+            if (line.contains("-") && TURKISH_AMOUNT_IN_LINE.matcher(line).find()
+                    && line.matches(".*-\\d{1,3}(?:\\.\\d{3})*,\\d{2}.*")) return false;
+        }
+        if (bankType == BankType.HALKBANK) {
+            // Halkbank: ödeme satırları ve SonradanTak alacak satırlarını atla
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.contains("hesaptan ödeme"))      return false;
+            if (lower.contains("sonradantak.alacak"))  return false;
+        }
+        if (bankType == BankType.YAPIKREDI) {
+            // Yapı Kredi: internet ödeme ve taksitlendirme faiz satırlarını atla
+            // (PdfTextCleaner bu satırları genellikle zaten filtreler — bu güvenlik katmanı)
+            String lower = line.replace('İ', 'i').toLowerCase(Locale.ROOT);
+            if (lower.contains("ödeme-internet"))      return false;
+            if (lower.contains("taksitlendirme"))      return false;
+            // Tutarı + ile başlayan satırlar ödeme/iade — atla
+            if (line.matches(".*\\s\\+\\d{1,3}(?:\\.\\d{3})*,\\d{2}.*")) return false;
+        }
+
         return HIGH_CONF_LINE.matcher(line).matches()
+                || HIGH_CONF_ISBANK.matcher(line).matches()
+                || HIGH_CONF_HALKBANK.matcher(line).matches()
                 || TURKISH_DATE_IN_LINE.matcher(line).find()
+                || SLASH_DATE_LINE.matcher(line).find()
                 || line.matches("^\\d{4}[-/]\\d{2}[-/]\\d{2}.*")
                 || line.matches("^\\d{1,2}[./]\\d{1,2}[./]\\d{4}.*");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Şehir/ülke suffix temizleyiciler
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** İş Bankası açıklamasından sondaki " ŞEHİR TR" veya " ŞEHİR TU" suffix'ini çıkarır. */
+    private String stripIsbankCitySuffix(String description) {
+        return description.replaceAll("\\s+\\S+\\s+T[RU]\\s*$", "").trim();
+    }
+
+    /** Halkbank açıklamasından sondaki şehir kelimesini çıkarır. */
+    private String stripHalkbankCity(String description) {
+        return description.replaceAll("\\s+\\S+\\s*$", "").trim();
+    }
+
+    /** Yapı Kredi açıklamasından sondaki " ŞEHİR TR" veya " ŞEHİR TU" suffix'ini çıkarır. */
+    private String stripYapiKrediCitySuffix(String description) {
+        return description.replaceAll("\\s+\\S+\\s+T[RU]\\s*$", "").trim();
     }
 
     /**
