@@ -66,21 +66,25 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        List<String> originPatterns = new ArrayList<>(
-                Arrays.stream(allowedOrigins.split(","))
-                        .map(String::trim)
-                        .filter(s -> !s.isBlank())
-                        .toList()
-        );
-        // Local geliştirmede env yanlış set edilse bile frontend erişimi bloklanmasın.
-        originPatterns.addAll(List.of(
-                "http://localhost:[*]",
-                "http://127.0.0.1:[*]",
-                "http://localhost:3000",
-                "http://127.0.0.1:3000",
-                "http://localhost:5173",
-                "http://127.0.0.1:5173"
-        ));
+        List<String> originPatterns = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+
+        // Localhost wildcard'ları yalnızca local-dev konfigürasyonunda ekle.
+        // ALLOWED_ORIGINS production URL'i içeriyorsa bu blok çalışmaz.
+        boolean isLocalConfig = originPatterns.stream()
+                .anyMatch(o -> o.contains("localhost") || o.contains("127.0.0.1"));
+        if (isLocalConfig) {
+            originPatterns.addAll(List.of(
+                    "http://localhost:[*]",
+                    "http://127.0.0.1:[*]",
+                    "http://localhost:3000",
+                    "http://127.0.0.1:3000",
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173"
+            ));
+        }
         configuration.setAllowedOriginPatterns(originPatterns);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));

@@ -20,4 +20,9 @@ FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY --from=backend-build /app/target/*.jar app.jar
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# -XX:MaxRAMPercentage: container bellek limitinin %75'ini heap'e ver (OOMKill önler)
+# -Djava.security.egd: /dev/random entropi bekleme sorununu aşar, startup hızlanır
+ENTRYPOINT ["java", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-Djava.security.egd=file:/dev/./urandom", \
+  "-jar", "app.jar"]

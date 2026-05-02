@@ -114,12 +114,11 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, "Dosya işlenemedi: " + e.getMessage());
     }
 
-    /** Beklenmedik tüm hatalar — en az bu kadarını görmeliyiz. */
+    /** Beklenmedik tüm hatalar — iç detaylar loglanır ama response'a yansımaz. */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleAll(Exception e) {
         log.error("Beklenmeyen hata [{}]: {}", e.getClass().getSimpleName(), e.getMessage(), e);
-        return build(HttpStatus.INTERNAL_SERVER_ERROR,
-                e.getClass().getSimpleName() + ": " + e.getMessage());
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Beklenmedik bir hata oluştu. Lütfen tekrar deneyin.");
     }
 
     private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message) {
