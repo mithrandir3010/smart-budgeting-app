@@ -376,10 +376,48 @@ public class ExtractionService {
         List<TransactionDto> localDtos = new ArrayList<>();
         List<String>         llmLines  = new ArrayList<>();
 
+        // Halkbank: "Sonradan Taksit MERCHANT X." satırlarını tara — orijinal
+        // ücret aynı ekstreden aynı gün krediyle iade edildiğinden (SonradanTak.Alacak)
+        // sadece taksit tutarı kalır; orijinal satırı LLM'e göndermemek çifte sayımı önler.
+        Set<String> sonradanTaksitMerchants = new java.util.HashSet<>();
+        if (bankType == BankType.HALKBANK) {
+            for (String raw : allLines) {
+                String t = raw.trim().replace('İ', 'i').toLowerCase(Locale.ROOT);
+                int idx = t.indexOf("sonradan taksit");
+                if (idx < 0) continue;
+                String rest = t.substring(idx + "sonradan taksit".length()).trim();
+                // strip leading DD/MM/YYYY prefix if any
+                rest = rest.replaceFirst("^\\d{2}/\\d{2}/\\d{4}\\s+", "");
+                StringBuilder sb = new StringBuilder();
+                for (String w : rest.split("\\s+")) {
+                    if (w.matches("\\d.*") || w.equals("taksit")) break;
+                    sb.append(w).append(' ');
+                }
+                String merchant = sb.toString().trim();
+                if (!merchant.isEmpty()) sonradanTaksitMerchants.add(merchant);
+            }
+            if (!sonradanTaksitMerchants.isEmpty()) {
+                log.debug("[router] Sonradan Taksit tespit edilen merchant(lar): {}", sonradanTaksitMerchants);
+            }
+        }
+
         for (int i = 0; i < allLines.length; i++) {
             String line     = allLines[i].trim();
             String nextLine = (i + 1 < allLines.length) ? allLines[i + 1].trim() : "";
             if (line.isBlank()) continue;
+
+            // Halkbank: Sonradan Taksit orijinal ücret satırını her iki yoldan da atla
+            // (hem HIGH_CONF hem de LLM'den önce — merchant cache öğrenilmiş olsa bile)
+            if (bankType == BankType.HALKBANK && !sonradanTaksitMerchants.isEmpty()) {
+                String lower = line.replace('İ', 'i').toLowerCase(Locale.ROOT);
+                if (SLASH_DATE_LINE.matcher(line).find()
+                        && ENGLISH_AMOUNT_IN_LINE.matcher(line).find()
+                        && !lower.contains("sonradan taksit")
+                        && sonradanTaksitMerchants.stream().anyMatch(lower::contains)) {
+                    log.debug("[router] Sonradan Taksit orijinal satır atlandı: {}", line);
+                    continue;
+                }
+            }
 
             if (isHighConfidence(line, nextLine, bankType)) {
                 Optional<TransactionDto> local = parseLineLocally(line, bankType);
