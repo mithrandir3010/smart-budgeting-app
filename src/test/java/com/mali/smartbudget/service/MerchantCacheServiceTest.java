@@ -117,16 +117,17 @@ class MerchantCacheServiceTest {
         }
 
         @Test
-        @DisplayName("Cache'deki 'Migros Nişantaşı' → 'Migros' description'ında da eşleşir")
-        void lookup_descriptionInPattern_matches() {
+        @DisplayName("Cache'de 'Migros Nişantaşı' varken 'Migros' araması eşleşmez — daha spesifik pattern genel description'ı yakalamamalı")
+        void lookup_descriptionInPattern_noMatch() {
             MerchantCache migrosNisantasi = MerchantCache.builder()
                     .id(4L).pattern("Migros Nişantaşı").category("Market").subscription(false).build();
             when(repository.findAll()).thenReturn(List.of(migrosNisantasi));
 
             Optional<MerchantCacheService.CachedResult> result = service.lookup("Migros");
 
-            assertThat(result).isPresent();
-            assertThat(result.get().category()).isEqualTo("Market");
+            // Unidirectional: descNorm.contains(patternNorm) → "migros".contains("migros nişantaşı") = false
+            // Bu, "Amazon Prime" cache entry'sinin "Amazon" harcamalarını yakalamasını önler.
+            assertThat(result).isEmpty();
         }
 
         @Test

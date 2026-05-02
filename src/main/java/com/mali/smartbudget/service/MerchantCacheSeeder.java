@@ -48,6 +48,7 @@ public class MerchantCacheSeeder implements ApplicationRunner {
 
             // ── Kafe ─────────────────────────────────────────────────────────
             seed("Starbucks",       "Kafe",      false),
+            seed("SBX",             "Kafe",      false),
             seed("Kahve Dünyası",   "Kafe",      false),
             seed("Gloria Jeans",    "Kafe",      false),
 
@@ -57,12 +58,15 @@ public class MerchantCacheSeeder implements ApplicationRunner {
             seed("Burger King",     "Restoran",  false),
             seed("Popeyes",         "Restoran",  false),
             seed("Subway",          "Restoran",  false),
+            seed("Getir",           "Restoran",  false),
 
             // ── Ulaşım ───────────────────────────────────────────────────────
             seed("Uber",            "Ulaşım",    false),
             seed("BiTaksi",         "Ulaşım",    false),
             seed("İETT",            "Ulaşım",    false),
             seed("Marmaray",        "Ulaşım",    false),
+            seed("HGS",             "Ulaşım",    false),
+            seed("OGS",             "Ulaşım",    false),
 
             // ── Akaryakıt ────────────────────────────────────────────────────
             seed("Shell",           "Akaryakıt", false),

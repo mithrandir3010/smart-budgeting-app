@@ -57,10 +57,10 @@ public class MerchantCacheService {
             }
         }
 
-        // 2. Pattern eşleme: cache deseni description'da veya description cache deseninde
+        // 2. Pattern eşleme: cache deseni description içinde geçiyor mu?
         for (MerchantCache entry : all) {
             String patternNorm = normalize(entry.getPattern());
-            if (descNorm.contains(patternNorm) || patternNorm.contains(descNorm)) {
+            if (descNorm.contains(patternNorm)) {
                 return hit(entry);
             }
         }
@@ -123,7 +123,7 @@ public class MerchantCacheService {
         String needle = normalize(description.trim());
         return repository.findAll().stream().anyMatch(entry -> {
             String pat = normalize(entry.getPattern());
-            return needle.equals(pat) || needle.contains(pat) || pat.contains(needle);
+            return needle.equals(pat) || needle.contains(pat);
         });
     }
 

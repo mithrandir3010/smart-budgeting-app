@@ -256,6 +256,15 @@ public class ExtractionService {
             "^\\d{2}/\\d{2}/\\d{4}\\s+"
     );
 
+    /** Halkbank taksit referans suffix: "1960.94/6-" gibi satır sonu ifadeleri */
+    private static final Pattern HALKBANK_TAKSIT_REF = Pattern.compile(
+            "\\d+\\.\\d+/\\d+-\\s*$"
+    );
+    /** Halkbank taksit sıra numarası satırı: "02.Taksit 0.00" */
+    private static final Pattern HALKBANK_TAKSIT_NUM = Pattern.compile(
+            "^0?\\d\\.Taksit\\s"
+    );
+
     private static final Map<String, Integer> TURKISH_MONTHS = Map.ofEntries(
             Map.entry("ocak", 1),   Map.entry("şubat", 2),  Map.entry("mart", 3),
             Map.entry("nisan", 4),  Map.entry("mayıs", 5),  Map.entry("haziran", 6),
@@ -383,10 +392,25 @@ public class ExtractionService {
 
             if (isTransactionCandidate(line, bankType)) {
                 llmLines.add(line);
-                // Taksit alt satırını bağlamı koruyarak birlikte gönder
+                // Yapı Kredi "X TL'lik işlemin N/M taksidi" alt satırını birlikte gönder
                 if (TAKSIT_SUBLINE_MARKER.matcher(nextLine).find()) {
                     llmLines.add(nextLine);
                     i++;
+                } else if (bankType == BankType.HALKBANK) {
+                    // Halkbank multi-line: tarih satırında tutar yok → sonraki satırı ekle
+                    if (SLASH_DATE_LINE.matcher(line).find()
+                            && !ENGLISH_AMOUNT_IN_LINE.matcher(line).find()
+                            && !TURKISH_AMOUNT_IN_LINE.matcher(line).find()
+                            && !nextLine.isBlank()) {
+                        llmLines.add(nextLine);
+                        i++;
+                    }
+                    // Halkbank taksit: "490.23  1960.94/6-" → "02.Taksit 0.00"
+                    else if (HALKBANK_TAKSIT_REF.matcher(line).find()
+                            && HALKBANK_TAKSIT_NUM.matcher(nextLine).find()) {
+                        llmLines.add(nextLine);
+                        i++;
+                    }
                 }
             }
         }
@@ -651,7 +675,8 @@ public class ExtractionService {
         if (lower.contains("iett") || lower.contains("metrobüs") || lower.contains("dolmuş")
                 || lower.contains("taksi") || lower.contains("uber") || lower.contains("bitaksi")
                 || lower.contains("vapur") || lower.contains("marmaray") || lower.contains("tcdd")
-                || lower.contains("otobüs") || lower.contains("ukome")) return "Ulaşım";
+                || lower.contains("otobüs") || lower.contains("ukome")
+                || lower.contains("otoyol") || lower.contains("hgs") || lower.contains("ogs")) return "Ulaşım";
 
         if (lower.contains("shell") || lower.contains("opet") || lower.contains("total")
                 || lower.contains("petrol") || lower.contains("benzin") || lower.contains("akaryakıt")
@@ -698,7 +723,7 @@ public class ExtractionService {
         String lower = description.replace('İ', 'i').toLowerCase(Locale.ROOT);
         return lower.contains("netflix") || lower.contains("spotify") || lower.contains("youtube")
                 || lower.contains("appletv") || lower.contains("apple tv") || lower.contains("disney")
-                || lower.contains("amazon prime") || lower.contains("icloud")
+                || lower.contains("amazon prime") || lower.contains("amazonprime") || lower.contains("icloud")
                 || lower.contains("google one") || lower.contains("googleone")
                 || lower.contains("adobe") || lower.contains("office365") || lower.contains("office 365")
                 || lower.contains("todtv") || lower.contains("üyelik");
@@ -904,6 +929,15 @@ public class ExtractionService {
     private boolean isTransactionCandidate(String line, BankType bankType) {
         if (line.length() < 8) return false;
         if (TAKSIT_SUBLINE_MARKER.matcher(line).find()) return false;
+
+        // Halkbank: DD/MM/YYYY ile başlayan her satır işlem başlangıcıdır —
+        // tutar bazen sonraki satırda geldiğinden burada amount kontrolü atlanır
+        if (bankType == BankType.HALKBANK && SLASH_DATE_LINE.matcher(line).find()) {
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.contains("hesaptan ödeme"))     return false;
+            if (lower.contains("sonradantak.alacak")) return false;
+            return true;
+        }
 
         boolean hasTurkishAmount = TURKISH_AMOUNT_IN_LINE.matcher(line).find();
         boolean hasEnglishAmount = ENGLISH_AMOUNT_IN_LINE.matcher(line).find();

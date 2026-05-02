@@ -138,7 +138,7 @@ public final class PdfTextCleaner {
         text = SEPARATOR_LINE.matcher(text).replaceAll("");
         text = POS_NOISE     .matcher(text).replaceAll("");
         text = EMBEDDED_TIME .matcher(text).replaceAll(" ");
-        text = EXCESS_SPACES .matcher(text).replaceAll(" ");
+        text = EXCESS_SPACES .matcher(text).replaceAll("  ");
         text = MULTIPLE_BLANK.matcher(text).replaceAll("\n\n");
 
         // Tek tek satırları filtrele: anlamsız kısa satırları ve banka gürültüsünü at.
