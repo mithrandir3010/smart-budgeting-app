@@ -14,7 +14,7 @@
 - 🔔 **Budget Limits & Alerts** — Set monthly caps per category and get notified when you are close to the limit
 - 💳 **Installment Detection** — Taksit (installment) payments are detected and grouped intelligently
 - 🤖 **AI Financial Coach (Serena)** — An MCP-powered AI coach that surfaces personalized spending insights
-- 🔐 **JWT Auth + Refresh Tokens** — Stateless authentication with access/refresh token rotation
+- 🔐 **JWT Auth + Refresh Tokens** — Stateless authentication with access/refresh token rotation via HttpOnly cookies
 - 🚦 **Rate Limiting** — Per-user API rate limiting to protect the backend
 
 <br>
@@ -66,9 +66,9 @@ Additional optimizations layered on top:
 The extraction pipeline uses a **polymorphic Strategy Pattern** to handle different Turkish bank statement formats. Rather than one monolithic parser, the system automatically detects the source bank from PDF content signatures and dispatches to the appropriate parsing strategy.
 
 Supported bank formats:
-- 🏦 İş Bankası
-- 🏦 Halkbank
-- 🏦 Yapı Kredi
+- 🏦 İş Bankası (Maximum Card)
+- 🏦 Halkbank (Paraf Card)
+- 🏦 Yapı Kredi (World Card)
 
 Each bank strategy encapsulates its own date format, column layout, and encoding quirks — new banks can be added without touching the core pipeline.
 
@@ -96,13 +96,13 @@ The backend exposes a **Model Context Protocol (MCP)** server (`/mcp` endpoint) 
 
 | Layer | Technology |
 |---|---|
-| Language | Java 25 |
+| Language | Java 17 |
 | Framework | Spring Boot 3.2, Spring MVC |
-| Security | Spring Security, JWT (jjwt 0.12), Refresh Token Rotation |
+| Security | Spring Security, JWT (jjwt 0.12), HttpOnly Cookie, Refresh Token Rotation |
 | Persistence | Spring Data JPA, Hibernate, PostgreSQL |
 | PDF Processing | Apache PDFBox 3.0 |
-| AI / LLM | LangChain4j 0.35 → OpenAI GPT-4o-mini |
-| MCP Server | Model Context Protocol SDK (mcp-spring-webmvc 0.8) |
+| AI / LLM | LangChain4j → OpenAI GPT-4.1-mini |
+| MCP Server | Model Context Protocol SDK (mcp-spring-webmvc) |
 | Build | Maven, Lombok |
 
 ### Frontend
@@ -111,7 +111,7 @@ The backend exposes a **Model Context Protocol (MCP)** server (`/mcp` endpoint) 
 |---|---|
 | Framework | React (Vite) |
 | Styling | Tailwind CSS |
-| HTTP | Axios |
+| HTTP | Axios (with interceptor-based token refresh) |
 | Routing | React Router |
 | State | React Context API |
 
@@ -119,24 +119,26 @@ The backend exposes a **Model Context Protocol (MCP)** server (`/mcp` endpoint) 
 
 | Component | Technology |
 |---|---|
-| Database | PostgreSQL 15 (Docker) |
+| Database | PostgreSQL 15 |
 | Containerization | Docker, Docker Compose |
+| Backend Hosting | Railway |
+| Frontend Hosting | Vercel |
 
 <br>
 
-## 🚀 Getting Started
+## 🚀 Getting Started (Local Development)
 
 ### Prerequisites
 
 - Docker Desktop
-- Java 21+
+- Java 17+
 - Node.js 20+ & npm
 - Maven 3.9+
 - OpenAI API key
 
 ### 1. Configure Environment
 
-Create a `.env` file in the project root (see `.env.example`):
+Create a `.env` file in the project root:
 
 ```env
 DB_NAME=smart_budget_db
@@ -145,7 +147,13 @@ DB_PASSWORD=your_secure_password
 DB_PORT=5434
 
 OPENAI_API_KEY=sk-...
-JWT_SECRET=your_256_bit_secret
+JWT_SECRET=<run: openssl rand -base64 32>
+```
+
+Create `frontend/.env.local`:
+
+```env
+VITE_API_URL=http://localhost:8080
 ```
 
 ### 2. Start the Database
@@ -154,7 +162,7 @@ JWT_SECRET=your_256_bit_secret
 docker compose up -d
 ```
 
-This spins up PostgreSQL on port `5434`. Spring Boot's DDL auto will create the schema on first run.
+This spins up PostgreSQL on port `5434`. Spring Boot DDL auto will create the schema on first run.
 
 ### 3. Start the Backend
 
@@ -176,19 +184,70 @@ The UI will be available at `http://localhost:5173`.
 
 <br>
 
-## 📡 API Overview
+## ☁️ Deployment (Railway + Vercel)
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/api/auth/register` | Register a new user |
-| `POST` | `/api/auth/login` | Login, receive JWT + refresh token |
-| `POST` | `/api/auth/refresh` | Rotate access token using refresh token |
-| `POST` | `/api/statements/upload` | Upload a PDF bank statement |
-| `GET` | `/api/statements` | List all uploaded statements |
-| `GET` | `/api/analytics/summary` | Get category-level spending summary |
-| `GET` | `/api/analytics/transactions` | Paginated transaction list |
-| `POST` | `/api/budget-limits` | Set a monthly budget limit for a category |
-| `GET` | `/api/budget-limits/alerts` | Get triggered budget alerts |
+The project is deployment-ready with full environment isolation.
+
+### Backend — Railway
+
+Set the following environment variables in the Railway dashboard:
+
+| Variable | Value |
+|---|---|
+| `SPRING_PROFILES_ACTIVE` | `prod` |
+| `JWT_SECRET` | Generate: `openssl rand -base64 32` |
+| `OPENAI_API_KEY` | `sk-...` |
+| `ALLOWED_ORIGINS` | `https://<your-vercel-domain>.vercel.app` |
+| `SECURE_COOKIE` | `true` |
+| `DB_URL` | Use Railway's **internal** PostgreSQL URL (`jdbc:postgresql://postgres.railway.internal:5432/railway`) |
+| `DB_USERNAME` | `postgres` |
+| `DB_PASSWORD` | Provided by Railway automatically |
+
+> **Health Check Path:** Set `/health` in Railway Settings → Health Check Path.
+
+The `application-prod.properties` profile activates automatically when `SPRING_PROFILES_ACTIVE=prod` is set, disabling SQL logging and switching DDL to `validate`.
+
+### Frontend — Vercel
+
+| Variable | Value |
+|---|---|
+| `VITE_API_URL` | `https://<your-railway-domain>.up.railway.app` |
+
+### Deploy order
+
+1. Deploy Railway (backend + database)
+2. Deploy Vercel (frontend)
+3. Update `ALLOWED_ORIGINS` in Railway with the final Vercel domain
+
+### Building for Railway locally (Apple Silicon)
+
+```bash
+docker build --platform linux/amd64 -t smart-budget-backend .
+```
+
+<br>
+
+## 📡 API Reference
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/register` | Public | Register a new user |
+| `POST` | `/api/v1/auth/login` | Public | Login, receive JWT + refresh token cookies |
+| `POST` | `/api/v1/auth/refresh` | Public | Rotate access token using refresh token |
+| `POST` | `/api/v1/auth/logout` | Public | Revoke refresh token, clear cookies |
+| `POST` | `/api/v1/statements/upload` | 🔒 | Upload a PDF bank statement |
+| `DELETE` | `/api/v1/statements/all` | 🔒 | Delete all statements and transactions |
+| `GET` | `/api/v1/analytics/summary` | 🔒 | Category-level spending summary |
+| `GET` | `/api/v1/analytics/transactions` | 🔒 | Full transaction list |
+| `GET` | `/api/v1/analytics/subscriptions` | 🔒 | Detected recurring subscriptions |
+| `GET` | `/api/v1/budget-limits` | 🔒 | List budget limits |
+| `POST` | `/api/v1/budget-limits` | 🔒 | Create or update a budget limit |
+| `DELETE` | `/api/v1/budget-limits/:id` | 🔒 | Delete a budget limit |
+| `GET` | `/api/v1/budget-limits/alerts` | 🔒 | Get triggered budget alerts |
+| `GET` | `/api/v1/user/profile` | 🔒 | Get user profile |
+| `PUT` | `/api/v1/user/profile` | 🔒 | Update profile |
+| `PUT` | `/api/v1/user/change-password` | 🔒 | Change password |
+| `GET` | `/health` | Public | Health check (used by Railway) |
 
 <br>
 
@@ -201,12 +260,14 @@ The UI will be available at `http://localhost:5173`.
 | ✅ Done | Merchant Cache with startup seeding |
 | ✅ Done | Installment (Taksit) detection and grouping |
 | ✅ Done | MCP-powered Serena AI Financial Coach |
-| ✅ Done | JWT auth with refresh token rotation |
+| ✅ Done | JWT auth with HttpOnly cookie + refresh token rotation |
 | ✅ Done | Per-user rate limiting |
-| 🔄 Planned | **Advanced Financial Filtering** — date range, category, merchant, and amount filters on the transaction list |
-| 🔄 Planned | **Bank-Independent Flexible Template System** — a configuration-driven parser template engine so any bank format can be onboarded without code changes |
+| ✅ Done | Production deployment configuration (Railway + Vercel) |
+| ✅ Done | Environment isolation (CORS, Secure Cookie, dynamic config) |
+| 🔄 Planned | **Advanced Financial Filtering** — date range, category, merchant, and amount filters |
+| 🔄 Planned | **Bank-Independent Template System** — config-driven parser so any bank format can be onboarded without code changes |
 | 🔄 Planned | **Export to CSV / Excel** — one-click statement export |
-| 🔄 Planned | **Multi-Statement Trend Analysis** — month-over-month spending comparisons across multiple uploaded statements |
+| 🔄 Planned | **Multi-Statement Trend Analysis** — month-over-month spending comparisons |
 
 <br>
 
@@ -239,7 +300,7 @@ The test suite covers:
 smart-budgeting-app/
 ├── src/main/java/com/mali/smartbudget/
 │   ├── config/          # Security, CORS, data initialization
-│   ├── controller/      # REST endpoints (Auth, Statement, Analytics, Budget)
+│   ├── controller/      # REST endpoints (Auth, Statement, Analytics, Budget, Health)
 │   ├── dto/             # Request/response data transfer objects
 │   ├── exception/       # Global exception handler, custom exceptions
 │   ├── filter/          # Rate limiting filter (per-user, IP-based)
@@ -249,13 +310,17 @@ smart-budgeting-app/
 │   ├── security/        # JWT filter, JwtService
 │   ├── service/         # Business logic (Extraction, Categorization, Analytics, …)
 │   └── util/            # AmountNormalizer, PdfTextCleaner, ChecksumUtil
+├── src/main/resources/
+│   ├── application.properties        # Base config (all values env-driven)
+│   └── application-prod.properties   # Production overrides (SQL off, DDL validate)
 ├── frontend/
 │   └── src/
-│       ├── components/  # Reusable UI components (BudgetGuard, TransactionsTable, …)
+│       ├── components/  # Reusable UI components
 │       ├── pages/       # Route-level pages (Dashboard, Upload, Login, Profile)
-│       ├── context/     # Auth context (JWT storage, user state)
-│       └── api/         # Axios API client
-├── docker-compose.yml   # PostgreSQL service definition
+│       ├── context/     # Auth context (cookie-based user state)
+│       └── api/         # Axios client with interceptor-based token refresh
+├── Dockerfile           # Multi-stage build (frontend → backend JAR → runtime)
+├── docker-compose.yml   # Local PostgreSQL service
 └── pom.xml
 ```
 
