@@ -17,9 +17,15 @@ RUN mvn package -DskipTests -B --no-transfer-progress
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 FROM eclipse-temurin:17-jre-jammy
+# wget: Docker HEALTHCHECK için gerekli; --no-install-recommends ile katman küçük tutulur
+RUN apt-get update && apt-get install -y --no-install-recommends wget \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=backend-build /app/target/*.jar app.jar
 EXPOSE 8080
+# --start-period=90s: Spring Boot + JPA + LangChain4j init süresine tolerans tanır
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+  CMD wget -qO- http://localhost:8080/health || exit 1
 # -XX:MaxRAMPercentage: container bellek limitinin %75'ini heap'e ver (OOMKill önler)
 # -Djava.security.egd: /dev/random entropi bekleme sorununu aşar, startup hızlanır
 ENTRYPOINT ["java", \

@@ -48,6 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/api/v1/auth/refresh").permitAll() // explicit: stateless token refresh
                         .requestMatchers("/mcp/**").permitAll()
+                        .requestMatchers("/health").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated()
                 )
