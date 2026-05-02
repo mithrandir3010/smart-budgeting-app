@@ -1,7 +1,29 @@
+# ── Versiyon kontrolü ─────────────────────────────────────────────────────────
 .git
 .github
+
+# ── IDE ve araç dosyaları ──────────────────────────────────────────────────────
 .idea
 *.iml
+*.DS_Store
+
+# ── Build çıktıları (multi-stage build zaten yeniden üretir) ───────────────────
 target/
 frontend/node_modules/
 frontend/.vite/
+frontend/dist/
+
+# ── Ortam ve sır dosyaları — Docker imajına KESİNLİKLE girmemeli ──────────────
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# ── Test kaynak kodu — runtime imajında gereksiz ──────────────────────────────
+src/test/
+
+# ── Proje dokümantasyonu ───────────────────────────────────────────────────────
+*.md
+docker-compose*.yml
