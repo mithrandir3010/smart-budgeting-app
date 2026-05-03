@@ -290,6 +290,7 @@ public class ExtractionService {
     private final ObjectMapper objectMapper;
     private final CategorizationService categorizationService;
     private final MerchantCacheService merchantCacheService;
+    private final LlmCategorizationService llmCategorizationService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Başlangıç doğrulaması
@@ -576,6 +577,26 @@ public class ExtractionService {
         if (total > 0 && cacheHits == total) {
             log.info("[cache] Tüm işlemler cache'de bulundu! " +
                      "OpenAI yalnızca yeni merchant'lar için kullanıldı.");
+        }
+
+        // ── [4.5/5] LLM fallback — "Diğer" kalan merchant'ları çöz ─────────────
+        long otherCount = allDtos.stream()
+                .filter(d -> d.categoryEnum() == com.mali.smartbudget.model.Category.OTHER)
+                .count();
+        if (otherCount > 0) {
+            log.info("[4.5/5] {} 'Diğer' işlem LLM fallback'e gönderiliyor...", otherCount);
+            try {
+                allDtos = llmCategorizationService.enrichOtherTransactions(allDtos);
+                long stillOther = allDtos.stream()
+                        .filter(d -> d.categoryEnum() == com.mali.smartbudget.model.Category.OTHER)
+                        .count();
+                log.info("[4.5/5] LLM fallback tamamlandı: {} çözüldü, {} hâlâ Diğer.",
+                        otherCount - stillOther, stillOther);
+            } catch (Exception e) {
+                log.warn("[4.5/5] LLM fallback başarısız, atlanıyor: {}", e.getMessage());
+            }
+        } else {
+            log.info("[4.5/5] Tüm işlemler kategorize edilmiş, LLM fallback atlandı.");
         }
 
         // ── [5/5] Tamamlandı ─────────────────────────────────────────────────
