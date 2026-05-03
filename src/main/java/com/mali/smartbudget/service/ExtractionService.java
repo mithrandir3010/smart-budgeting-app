@@ -702,65 +702,173 @@ public class ExtractionService {
         // İ (U+0130) → i önce replace edilmeli; Locale.ROOT bunu "i̇" yapıyor
         String lower = description.replace('İ', 'i').toLowerCase(Locale.ROOT);
 
+        // ── Market / Süpermarket ─────────────────────────────────────────────
         if (lower.contains("migros") || lower.contains("bim") || lower.contains("a101")
                 || lower.contains("şok") || lower.contains("carrefour") || lower.contains("hakmar")
-                || lower.contains("macro") || lower.contains("kiler") || lower.contains("metro")
+                || lower.contains("macro") || lower.contains("kiler") || lower.contains("onur market")
+                || lower.contains("file market") || lower.contains("aziziye") || lower.contains("reel market")
+                || lower.contains("tarım kredi") || lower.contains("pehlivanoğlu") || lower.contains("sarıyer market")
                 || lower.contains("market") || lower.contains("manav") || lower.contains("kasap")
-                || lower.contains("fırın") || lower.contains("ekmek") || lower.contains("bakkal")
-                || lower.contains("kuruyemiş") || lower.contains("gıda") || lower.contains("pazar")
-                || lower.contains("sebze") || lower.contains("meyve")) return "Market";
+                || lower.contains("fırın") || lower.contains("pastane") || lower.contains("ekmek")
+                || lower.contains("bakkal") || lower.contains("kuruyemiş") || lower.contains("gıda")
+                || lower.contains("pazar") || lower.contains("sebze") || lower.contains("meyve")
+                || lower.contains("şarküteri") || lower.contains("saray lokum")) return "Market";
 
-        if (lower.contains("starbucks") || lower.contains("gloria") || lower.contains("kahve")
-                || lower.contains("espresso") || lower.contains("cafe") || lower.contains("kafe")
-                || lower.contains("coffee")) return "Kafe";
+        // ── Online Yemek / Paket Servis ──────────────────────────────────────
+        // "yemeksepeti" içinde "yemek" geçtiğinden Restoran kontrolünden önce gelmeli
+        if (lower.contains("yemeksepeti") || lower.contains("getir") || lower.contains("trendyol go")
+                || lower.contains("trendyolgo") || lower.contains("fuudy") || lower.contains("banabi")
+                || lower.contains("gorillas")) return "Online Yemek";
 
-        if (lower.contains("restoran") || lower.contains("restaurant") || lower.contains("burger")
-                || lower.contains("pizza") || lower.contains("döner") || lower.contains("kebap")
-                || lower.contains("balık") || lower.contains("mcdonald") || lower.contains("kfc")
-                || lower.contains("popeyes") || lower.contains("subway") || lower.contains("noodle")
-                || lower.contains("yemek")) return "Restoran";
+        // ── Kafe ─────────────────────────────────────────────────────────────
+        if (lower.contains("starbucks") || lower.contains("gloria jean") || lower.contains("caribou")
+                || lower.contains("kahve dünyası") || lower.contains("kahve dunyasi")
+                || lower.contains("nero") || lower.contains("costa coffee") || lower.contains("tchibo")
+                || lower.contains("espresso") || lower.contains("brew") || lower.contains("cafe")
+                || lower.contains("kafe") || lower.contains("coffee") || lower.contains("kahve")
+                || lower.contains("çay evi") || lower.contains("çayhane")) return "Kafe";
 
+        // ── Restoran ─────────────────────────────────────────────────────────
+        if (lower.contains("mcdonald") || lower.contains("burger king") || lower.contains("kfc")
+                || lower.contains("popeyes") || lower.contains("subway") || lower.contains("dominos")
+                || lower.contains("little caesar") || lower.contains("pizza hut") || lower.contains("sbarro")
+                || lower.contains("iskender") || lower.contains("lahmacun") || lower.contains("çiğ köfte")
+                || lower.contains("restoran") || lower.contains("restaurant") || lower.contains("lokanta")
+                || lower.contains("büfe") || lower.contains("burger") || lower.contains("pizza")
+                || lower.contains("döner") || lower.contains("kebap") || lower.contains("kebab")
+                || lower.contains("balık") || lower.contains("noodle") || lower.contains("sushi")
+                || lower.contains("pide") || lower.contains("yemek") || lower.contains("ızgara")
+                || lower.contains("ocakbaşı") || lower.contains("mangal") || lower.contains("meyhane")
+                || lower.contains("steakhouse")) return "Restoran";
+
+        // ── Ulaşım ───────────────────────────────────────────────────────────
         if (lower.contains("iett") || lower.contains("metrobüs") || lower.contains("dolmuş")
                 || lower.contains("taksi") || lower.contains("uber") || lower.contains("bitaksi")
-                || lower.contains("vapur") || lower.contains("marmaray") || lower.contains("tcdd")
-                || lower.contains("otobüs") || lower.contains("ukome")
-                || lower.contains("otoyol") || lower.contains("hgs") || lower.contains("ogs")) return "Ulaşım";
+                || lower.contains("volt taksi") || lower.contains("maxi taksi")
+                || lower.contains("vapur") || lower.contains("ido ") || lower.contains("budo")
+                || lower.contains("marmaray") || lower.contains("tcdd") || lower.contains("uludağ ekspres")
+                || lower.contains("otobüs") || lower.contains("ukome") || lower.contains("beltur")
+                || lower.contains("otoyol") || lower.contains("hgs") || lower.contains("ogs")
+                || lower.contains("ispark") || lower.contains("otopark") || lower.contains("park ")
+                || lower.contains("pegasus") || lower.contains("thy ") || lower.contains("turkish airlines")
+                || lower.contains("anadolujet") || lower.contains("anadolu jet") || lower.contains("sunexpress")
+                || lower.contains("corendon") || lower.contains("flixbus") || lower.contains("kamil koç")
+                || lower.contains("metro turizm") || lower.contains("pamukkale turizm")
+                || lower.contains("sixt") || lower.contains("budget rent") || lower.contains("hertz")
+                || lower.contains("avis") || lower.contains("europcar")
+                || lower.contains("rent a car") || lower.contains("oto kiralama")) return "Ulaşım";
 
-        if (lower.contains("shell") || lower.contains("opet") || lower.contains("total")
+        // ── Akaryakıt ────────────────────────────────────────────────────────
+        if (lower.contains("shell") || lower.contains("opet") || lower.contains("petrol ofisi")
+                || lower.contains("total") || lower.contains("lukoil") || lower.contains("go petrol")
+                || lower.contains("aytemiz") || lower.contains("alpet") || lower.contains("enerji sa")
                 || lower.contains("petrol") || lower.contains("benzin") || lower.contains("akaryakıt")
-                || lower.contains("lpg") || (lower.contains("bp") && lower.length() <= 6)) return "Akaryakıt";
+                || lower.contains("lpg") || lower.contains("motorin")
+                || (lower.contains("bp") && lower.length() <= 6)) return "Akaryakıt";
 
-        if (lower.contains("iski") || lower.contains("igdas") || lower.contains("igdaş")
-                || lower.contains("ayedas") || lower.contains("bedas") || lower.contains("elektrik")
-                || lower.contains("doğalgaz") || lower.contains("turkcell") || lower.contains("vodafone")
-                || lower.contains("türk telekom") || lower.contains("internet") || lower.contains("fatura")) return "Fatura";
+        // ── Fatura / Abonelik ────────────────────────────────────────────────
+        if (lower.contains("iski") || lower.contains("aski") || lower.contains("izsu")
+                || lower.contains("buski") || lower.contains("saski")
+                || lower.contains("igdas") || lower.contains("igdaş") || lower.contains("izgaz")
+                || lower.contains("bursagaz") || lower.contains("gazdaş") || lower.contains("petek gaz")
+                || lower.contains("ayedas") || lower.contains("bedas") || lower.contains("sedas")
+                || lower.contains("gedas") || lower.contains("akenerji") || lower.contains("enerjisa")
+                || lower.contains("boğaziçi elek") || lower.contains("elektrik") || lower.contains("doğalgaz")
+                || lower.contains("turkcell") || lower.contains("vodafone") || lower.contains("türk telekom")
+                || lower.contains("superonline") || lower.contains("türknet") || lower.contains("kablonet")
+                || lower.contains("millenicom") || lower.contains("internet") || lower.contains("fatura")
+                || lower.contains("abonelik")) return "Fatura";
 
-        if (lower.contains("kira") || lower.contains("aidat")) return "Kira";
+        // ── Kira / Aidat ─────────────────────────────────────────────────────
+        if (lower.contains("kira") || lower.contains("aidat")
+                || lower.contains("site yönetim")) return "Kira";
 
-        if (lower.contains("eczane") || lower.contains("pharmacy") || lower.contains("hastane")
-                || lower.contains("klinik") || lower.contains("doktor") || lower.contains("diş")
-                || lower.contains("optik") || lower.contains("laborat")) return "Sağlık";
+        // ── Sağlık ───────────────────────────────────────────────────────────
+        if (lower.contains("eczane") || lower.contains("pharmacy") || lower.contains("eczacı")
+                || lower.contains("hastane") || lower.contains("hospital") || lower.contains("klinik")
+                || lower.contains("poliklinik") || lower.contains("muayenehane")
+                || lower.contains("doktor") || lower.contains("hekim") || lower.contains("dr.")
+                || lower.contains("acıbadem") || lower.contains("medicana") || lower.contains("medipol")
+                || lower.contains("liv hospital") || lower.contains("florence nightingale")
+                || lower.contains("bayındır") || lower.contains("çankaya hastane")
+                || lower.contains("diş") || lower.contains("dental") || lower.contains("ortodonti")
+                || lower.contains("optik") || lower.contains("optisyen") || lower.contains("gözlük")
+                || lower.contains("laborat") || lower.contains("lazer")) return "Sağlık";
 
+        // ── Spor / Fitness ───────────────────────────────────────────────────
+        if (lower.contains("decathlon") || lower.contains("macfit") || lower.contains("fitlife")
+                || lower.contains("sportlife") || lower.contains("fit&go") || lower.contains("spor salonu")
+                || lower.contains("spor merkezi") || lower.contains("fitness") || lower.contains("gym")
+                || lower.contains("yüzme") || lower.contains("tenis kulübü") || lower.contains("golf kulübü")
+                || lower.contains("pilates") || lower.contains("yoga")) return "Spor";
+
+        // ── Eğlence ──────────────────────────────────────────────────────────
+        // "amazon prime" burada yakalanır; tekil "amazon" alışveriş için aşağıda
         if (lower.contains("netflix") || lower.contains("spotify") || lower.contains("youtube")
-                || lower.contains("disney") || lower.contains("sinema") || lower.contains("tiyatro")
-                || lower.contains("konser") || lower.contains("amazon prime") || lower.contains("todtv")) return "Eğlence";
+                || lower.contains("disney") || lower.contains("exxen") || lower.contains("gain tv")
+                || lower.contains("blutv") || lower.contains("todtv") || lower.contains("mubi")
+                || lower.contains("amazon prime") || lower.contains("apple tv")
+                || lower.contains("steam") || lower.contains("playstation") || lower.contains("xbox")
+                || lower.contains("epic games") || lower.contains("nintendo")
+                || lower.contains("sinema") || lower.contains("cinemaximum") || lower.contains("cinemars")
+                || lower.contains("tiyatro") || lower.contains("konser") || lower.contains("festival")
+                || lower.contains("biletix") || lower.contains("passo")) return "Eğlence";
 
+        // ── Seyahat ──────────────────────────────────────────────────────────
+        if (lower.contains("airbnb") || lower.contains("booking.com") || lower.contains("trivago")
+                || lower.contains("otel") || lower.contains("hotel") || lower.contains("tatilsepeti")
+                || lower.contains("odamax") || lower.contains("jolly") || lower.contains("vk travel")
+                || lower.contains("tatil budur") || lower.contains("touristica")) return "Seyahat";
+
+        // ── Teknoloji / Elektronik ───────────────────────────────────────────
         if (lower.contains("apple") || lower.contains("samsung") || lower.contains("mediamarkt")
                 || lower.contains("vatan") || lower.contains("teknosa") || lower.contains("arçelik")
-                || lower.contains("beko") || lower.contains("amazon") || lower.contains("bilgisayar")
-                || lower.contains("trendyol")) return "Teknoloji";
+                || lower.contains("beko") || lower.contains("vestel") || lower.contains("bosch")
+                || lower.contains("dyson") || lower.contains("bilgisayar") || lower.contains("notebook")
+                || lower.contains("laptop") || lower.contains("iphone") || lower.contains("ipad")) return "Teknoloji";
 
+        // ── Online Alışveriş ─────────────────────────────────────────────────
+        // "amazon" (prime olmayan) burada; "trendyol yemek/go" zaten Online Yemek'te yakalandı
+        if (lower.contains("trendyol") || lower.contains("hepsiburada") || lower.contains("amazon")
+                || lower.contains("gittigidiyor") || lower.contains("n11.com") || lower.contains("ciceksepeti")
+                || lower.contains("çiçeksepeti") || lower.contains("morhipo") || lower.contains("boyner")
+                || lower.contains("modanisa") || lower.contains("iyzico")) return "Online Alışveriş";
+
+        // ── Giyim ────────────────────────────────────────────────────────────
         if (lower.contains("zara") || lower.contains("lcwaikiki") || lower.contains("lc waikiki")
                 || lower.contains("h&m") || lower.contains("mavi") || lower.contains("koton")
-                || lower.contains("defacto") || lower.contains("adidas") || lower.contains("nike")
-                || lower.contains("giyim") || lower.contains("ayakkabı") || lower.contains("tekstil")) return "Giyim";
+                || lower.contains("defacto") || lower.contains("bershka") || lower.contains("pull&bear")
+                || lower.contains("stradivarius") || lower.contains("marks & spencer")
+                || lower.contains("gap") || lower.contains("vakko") || lower.contains("pierre cardin")
+                || lower.contains("adidas") || lower.contains("nike") || lower.contains("puma")
+                || lower.contains("reebok") || lower.contains("new balance") || lower.contains("vans")
+                || lower.contains("converse") || lower.contains("timberland") || lower.contains("columbia")
+                || lower.contains("giyim") || lower.contains("tekstil") || lower.contains("ayakkabı")
+                || lower.contains("çanta") || lower.contains("kıyafet")) return "Giyim";
 
-        if (lower.contains("üniversite") || lower.contains("kurs") || lower.contains("kitap")
-                || lower.contains("udemy") || lower.contains("coursera") || lower.contains("okul")
-                || lower.contains("dershane")) return "Eğitim";
+        // ── Ev & Yaşam ───────────────────────────────────────────────────────
+        if (lower.contains("ikea") || lower.contains("koçtaş") || lower.contains("bauhaus")
+                || lower.contains("özdilek") || lower.contains("bellona") || lower.contains("istikbal")
+                || lower.contains("mondi") || lower.contains("çilek") || lower.contains("english home")
+                || lower.contains("yataş") || lower.contains("dgn") || lower.contains("mobilya")
+                || lower.contains("dekorasyon") || lower.contains("ev eşyası")) return "Ev & Yaşam";
 
+        // ── Eğitim ───────────────────────────────────────────────────────────
+        if (lower.contains("üniversite") || lower.contains("kurs") || lower.contains("udemy")
+                || lower.contains("coursera") || lower.contains("linkedin learning")
+                || lower.contains("okul") || lower.contains("dershane") || lower.contains("kırtasiye")
+                || lower.contains("kitap") || lower.contains("d&r") || lower.contains("babil")) return "Eğitim";
+
+        // ── Sigorta ──────────────────────────────────────────────────────────
         if (lower.contains("sigorta") || lower.contains("kasko") || lower.contains("emeklilik")
-                || lower.contains("dask")) return "Sigorta";
+                || lower.contains("dask") || lower.contains("allianz") || lower.contains("axa sigorta")
+                || lower.contains("mapfre") || lower.contains("hdi sigorta")
+                || lower.contains("anadolu sigorta")) return "Sigorta";
+
+        // ── Araç Bakım ───────────────────────────────────────────────────────
+        if (lower.contains("oto servis") || lower.contains("lastik") || lower.contains("yedek parça")
+                || lower.contains("oto yıkama") || lower.contains("kaporta") || lower.contains("akü")
+                || lower.contains("egzoz") || lower.contains("fren") || lower.contains("oto bakım")) return "Araç Bakım";
 
         return "Diğer";
     }
@@ -770,11 +878,18 @@ public class ExtractionService {
         if (description == null || description.isBlank()) return false;
         String lower = description.replace('İ', 'i').toLowerCase(Locale.ROOT);
         return lower.contains("netflix") || lower.contains("spotify") || lower.contains("youtube")
-                || lower.contains("appletv") || lower.contains("apple tv") || lower.contains("disney")
+                || lower.contains("apple tv") || lower.contains("appletv") || lower.contains("disney")
                 || lower.contains("amazon prime") || lower.contains("amazonprime") || lower.contains("icloud")
-                || lower.contains("google one") || lower.contains("googleone")
+                || lower.contains("google one") || lower.contains("googleone") || lower.contains("google storage")
                 || lower.contains("adobe") || lower.contains("office365") || lower.contains("office 365")
-                || lower.contains("todtv") || lower.contains("üyelik");
+                || lower.contains("microsoft 365") || lower.contains("todtv") || lower.contains("exxen")
+                || lower.contains("blutv") || lower.contains("gain tv") || lower.contains("mubi")
+                || lower.contains("playstation plus") || lower.contains("xbox game pass")
+                || lower.contains("nintendo online") || lower.contains("steam")
+                || lower.contains("dropbox") || lower.contains("onedrive")
+                || lower.contains("figma") || lower.contains("notion") || lower.contains("slack")
+                || lower.contains("zoom") || lower.contains("turkcell tv+") || lower.contains("tivibu")
+                || lower.contains("üyelik") || lower.contains("abonelik");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
