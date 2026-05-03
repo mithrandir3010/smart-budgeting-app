@@ -30,4 +30,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     @Query("SELECT t.category, SUM(t.amount) FROM Transaction t WHERE t.user.id = :userId GROUP BY t.category")
     List<Object[]> findCategoryTotals(@Param("userId") Long userId);
+
+    @Query("SELECT MIN(t.date), MAX(t.date) FROM Transaction t WHERE t.user.id = :userId")
+    List<Object[]> findDateRange(@Param("userId") Long userId);
 }

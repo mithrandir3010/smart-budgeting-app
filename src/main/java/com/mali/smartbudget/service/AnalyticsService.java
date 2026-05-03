@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -68,15 +69,16 @@ public class AnalyticsService {
                     userId, totalSpending, monthlyBudget);
         }
 
-        LocalDate today    = LocalDate.now();
-        int dayOfMonth     = today.getDayOfMonth();
-        int daysInMonth    = today.lengthOfMonth();
+        // Ekstrenin fiili tarih aralığını kullan — bugünün ayın kaçı olduğu değil.
+        // Kredi kartı ekstresi her zaman ~30 gündür; gerçek gün sayısıyla bölerek
+        // günlük oran ve ay sonu tahmini doğru hesaplanır.
+        int statementDays = resolveStatementDays(userId);
 
-        BigDecimal dailyRate         = computeDailyRate(totalSpending, dayOfMonth);
-        BigDecimal projectedSpending = dailyRate.multiply(BigDecimal.valueOf(daysInMonth))
+        BigDecimal dailyRate         = computeDailyRate(totalSpending, statementDays);
+        BigDecimal projectedSpending = dailyRate.multiply(BigDecimal.valueOf(30))
                                                 .setScale(2, RoundingMode.HALF_UP);
         String coachAdvice = buildCoachAdvice(totalSpending, categoryBreakdown,
-                                              projectedSpending, dayOfMonth, monthlyBudget);
+                                              projectedSpending, statementDays, monthlyBudget);
 
         List<BudgetAlertDto> alerts = budgetLimitService.computeAlerts(userId, categoryBreakdown);
 
@@ -94,11 +96,25 @@ public class AnalyticsService {
     // Günlük harcama hızı
     // ─────────────────────────────────────────────────────────────────────────
 
-    BigDecimal computeDailyRate(BigDecimal totalSpending, int dayOfMonth) {
-        if (dayOfMonth <= 0 || totalSpending.compareTo(BigDecimal.ZERO) == 0) {
+    /**
+     * Kullanıcının işlemlerindeki ilk-son tarih arasındaki gün sayısını döner.
+     * Ekstre her zaman ~30 gündür; gerçek aralık 1'den küçük olamaz.
+     * Veri yoksa ya da tek günse 30 (standart ekstre süresi) kullanılır.
+     */
+    private int resolveStatementDays(Long userId) {
+        List<Object[]> range = transactionRepository.findDateRange(userId);
+        if (range.isEmpty() || range.get(0)[0] == null) return 30;
+        LocalDate minDate = (LocalDate) range.get(0)[0];
+        LocalDate maxDate = (LocalDate) range.get(0)[1];
+        int days = (int) ChronoUnit.DAYS.between(minDate, maxDate) + 1;
+        return Math.max(days, 1);
+    }
+
+    BigDecimal computeDailyRate(BigDecimal totalSpending, int statementDays) {
+        if (statementDays <= 0 || totalSpending.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
-        return totalSpending.divide(BigDecimal.valueOf(dayOfMonth), 2, RoundingMode.HALF_UP);
+        return totalSpending.divide(BigDecimal.valueOf(statementDays), 2, RoundingMode.HALF_UP);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
