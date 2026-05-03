@@ -232,12 +232,16 @@ public class ExtractionService {
     );
 
     /**
-     * İş Bankası (Maximum): DD/MM/YYYY AÇIKLAMA ŞEHİR TR TÜRK_TUTAR [MAXIPUAN]
+     * İş Bankası (Maximum): DD/MM/YYYY AÇIKLAMA ŞEHİR TR|TU TÜRK_TUTAR [MAXIPUAN]
      * Örnek: "11/03/2026 IDRIS DERE BURSA TR 150,00"
      * Örnek: "11/03/2026 BIM AS T004 TOPKAPI / I BURSA TR 309,52 0,05"
+     *
+     * .+? (non-greedy): MaxiPuan suffix'i (0,05) olan satırlarda greedy .+ gerçek tutarı
+     * description'a yutarak MaxiPuan'ı tutar olarak alırdı. Non-greedy + explicit CITY TR/TU
+     * grubu bu hatayı önler; group(3) her zaman ana tutar olur.
      */
     private static final Pattern HIGH_CONF_ISBANK = Pattern.compile(
-            "^(\\d{2}/\\d{2}/\\d{4})\\s+(.+)\\s+(\\d{1,3}(?:\\.\\d{3})*,\\d{2})(?:\\s+\\d{1,3},\\d{2})?\\s*$"
+            "^(\\d{2}/\\d{2}/\\d{4})\\s+(.+?)\\s+\\S+\\s+T[RU]\\s+(\\d{1,3}(?:\\.\\d{3})*,\\d{2})(?:\\s+\\d{1,3},\\d{2})?\\s*$"
     );
 
     /**
