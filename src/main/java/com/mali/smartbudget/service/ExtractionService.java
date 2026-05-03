@@ -99,13 +99,19 @@ public class ExtractionService {
             "21/03/2026 MOOD TRİO BEACH AYDIN 1,100.00  0.00" → {"d":"2026-03-21","n":"Mood Trio Beach","a":1100.00,"t":0}
             "20/03/2026 Hesaptan Ödeme - Teşekkür Ederiz - + 8,925.44  0.00" → SKIP (payment row)
 
-            --- İş Bankası (Maximum) examples — date DD/MM/YYYY, amount Turkish decimal, CITY TR suffix ---
+            --- İş Bankası (Maximum) examples — date DD/MM/YYYY, amount Turkish decimal, CITY TR/TU suffix ---
             "12/03/2026 TARIHI IZNIK FIRINI BURSA TR 70,00" → {"d":"2026-03-12","n":"Tarihi İznik Fırını","a":70.00,"t":0}
             "24/03/2026 SURA AKARYAKIT BURSA TR 1.000,00" → {"d":"2026-03-24","n":"Sura Akaryakıt","a":1000.00,"t":0}
             "14/03/2026 IYZICO/AMAZON TURKEY PE ISTANBUL TR 512,23 2/6 taksidi (3.073,40)" → {"d":"2026-03-14","n":"Amazon","a":512.23,"t":2}
             "27/03/2026 WWW. GIB.GOV.TR BURSA TR 953,16 3/3 taksidi (2.859,50)" → {"d":"2026-03-27","n":"GIB Vergi","a":953.16,"t":3}
-            "12/03/2026 IGDAS-ISTANBUL GAZ DAGI FATURA ÖDEME ÜCRETI 31,16" → SKIP (service fee)
+            "04/04/2026 ODEME.IDAS.COM.TR -IS- ISTANBUL TR 3.888,88 9/9 taksidi (35.000,00)" → {"d":"2026-04-04","n":"IDAS","a":3888.88,"t":9}
+            "12/03/2026 500106382776 IGDAS-ISTANBUL FAT.ÖDE. 848,00" → {"d":"2026-03-12","n":"IGDAS","a":848.00,"t":0}
+            "12/03/2026 5657586160 CK BEPSAS FAT.ÖDE. 245,00" → {"d":"2026-03-12","n":"CK Bepsas","a":245.00,"t":0}
+            "27/03/2026 800006466056 BURSA SEHIRICI FAT.ÖDE. 2.200,00" → {"d":"2026-03-27","n":"Bursa Şehiriçi Doğalgaz","a":2200.00,"t":0}
+            "12/03/2026 IGDAS-ISTANBUL GAZ DAGI FATURA ÖDEME ÜCRETI 31,16" → SKIP (service fee — FATURA ÖDEME ÜCRETİ rows ONLY)
             "20/03/2026 2225-392377 HESAPTAN AKTARIM 2225 İNTERAKTİF -14.851,98" → SKIP (payment)
+            IMPORTANT: FAT.ÖDE. rows = real bill payments made via the card — always INCLUDE them.
+                       Leading reference/account numbers (long digit strings right after the date) are noise — strip from merchant name.
 
             Statement:
             %s

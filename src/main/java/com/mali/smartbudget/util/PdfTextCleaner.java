@@ -138,6 +138,13 @@ public final class PdfTextCleaner {
         text = SEPARATOR_LINE.matcher(text).replaceAll("");
         text = POS_NOISE     .matcher(text).replaceAll("");
         text = EMBEDDED_TIME .matcher(text).replaceAll(" ");
+
+        // İş Bankası PDFBox çıktısında tarih ile açıklama arasında boşluk bulunmaz.
+        // "12/03/2026IDRIS DERE" → "12/03/2026 IDRIS DERE" (HIGH_CONF_ISBANK ve LLM için gerekli)
+        if (isIsbank) {
+            text = text.replaceAll("(\\d{2}/\\d{2}/\\d{4})(?=\\S)", "$1 ");
+        }
+
         text = EXCESS_SPACES .matcher(text).replaceAll("  ");
         text = MULTIPLE_BLANK.matcher(text).replaceAll("\n\n");
 
