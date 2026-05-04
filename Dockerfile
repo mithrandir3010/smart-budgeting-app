@@ -9,9 +9,9 @@ RUN npm run build
 # ── Stage 2: Build backend JAR ────────────────────────────────────────────────
 FROM maven:3.9-eclipse-temurin-17 AS backend-build
 WORKDIR /app
-COPY pom.xml .
+COPY backend/pom.xml .
 RUN mvn dependency:go-offline -B --no-transfer-progress
-COPY src/ src/
+COPY backend/src/ src/
 COPY --from=frontend-build /app/dist/ src/main/resources/static/
 RUN mvn package -DskipTests -B --no-transfer-progress
 

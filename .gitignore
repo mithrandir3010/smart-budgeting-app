@@ -1,4 +1,5 @@
 target/
+backend/target/
 .env
 .env.local
 .env.*.local
@@ -19,3 +20,5 @@ frontend/.vite/
 
 # Log dosyaları
 *.log
+logs/
+backend/logs/
