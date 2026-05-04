@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { fmt } from '../../lib/utils';
+import { fmt } from '../../utils/helpers';
 
 const PALETTE = [
   '#10b981', // emerald

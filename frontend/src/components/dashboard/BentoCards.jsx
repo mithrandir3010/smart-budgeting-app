@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Zap, Target, BarChart2 } from 'lucide-react';
-import { cn, fmt } from '../../lib/utils';
+import { cn, fmt } from '../../utils/helpers';
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20, scale: 0.97 },
