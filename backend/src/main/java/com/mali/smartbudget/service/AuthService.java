@@ -11,6 +11,7 @@ import com.mali.smartbudget.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -26,6 +27,7 @@ public class AuthService implements UserDetailsService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
+    private final EmailVerificationService emailVerificationService;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -34,7 +36,7 @@ public class AuthService implements UserDetailsService {
                         "Kullanıcı bulunamadı: " + username));
     }
 
-    public AuthTokenResult register(RegisterRequest request) {
+    public void register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw new IllegalArgumentException(
                     "Bu kullanıcı adı zaten alınmış: " + request.username());
@@ -50,15 +52,14 @@ public class AuthService implements UserDetailsService {
                 .password(passwordEncoder.encode(request.password()))
                 .fullName(request.fullName())
                 .role("ROLE_USER")
+                .emailVerified(false)
                 .build();
 
         userRepository.save(user);
-        log.info("Yeni kullanıcı kaydedildi: {}", user.getUsername());
 
-        String accessToken = jwtService.generateToken(user);
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
-        return new AuthTokenResult(accessToken, refreshToken.getToken(),
-                new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
+        String token = emailVerificationService.createToken(user);
+        // Phase 2: emailService.sendVerificationEmail(user, token) will replace this log
+        log.info("Doğrulama token'ı oluşturuldu: username={}, token={}", user.getUsername(), token);
     }
 
     public AuthTokenResult login(LoginRequest request) {
@@ -67,6 +68,10 @@ public class AuthService implements UserDetailsService {
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             throw new BadCredentialsException("Kullanıcı adı veya şifre hatalı.");
+        }
+
+        if (!user.isEmailVerified()) {
+            throw new DisabledException("E-posta adresinizi doğrulamanız gerekiyor.");
         }
 
         String accessToken = jwtService.generateToken(user);

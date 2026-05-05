@@ -33,6 +33,7 @@ public class DataInitializer implements CommandLineRunner {
                 .fullName("Mali Test Kullanıcısı")
                 .password(passwordEncoder.encode(DEFAULT_PASSWORD))
                 .role("ROLE_USER")
+                .emailVerified(true)
                 .build();
 
         userRepository.save(testUser);

@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -55,6 +56,12 @@ public class GlobalExceptionHandler {
         body.put("periodStart",    e.getPeriodStart() != null ? e.getPeriodStart().toString() : null);
         body.put("periodEnd",      e.getPeriodEnd()   != null ? e.getPeriodEnd().toString()   : null);
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(DisabledException.class)
+    public ResponseEntity<Map<String, Object>> handleDisabled(DisabledException e) {
+        log.warn("Doğrulanmamış hesap giriş denemesi: {}", e.getMessage());
+        return build(HttpStatus.FORBIDDEN, e.getMessage());
     }
 
     @ExceptionHandler(BadCredentialsException.class)

@@ -18,11 +18,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
+import com.mali.smartbudget.service.EmailVerificationService;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -35,6 +35,7 @@ public class AuthController {
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
     private final JwtService jwtService;
+    private final EmailVerificationService emailVerificationService;
 
     @Value("${jwt.expiration}")
     private long accessExpiration;
@@ -46,14 +47,18 @@ public class AuthController {
     private boolean cookieSecure;
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<Map<String, String>> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Kayıt isteği: username={}", request.username());
-        AuthTokenResult result = authService.register(request);
+        authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .header(HttpHeaders.SET_COOKIE,
-                        buildAccessCookie(result.accessToken()).toString(),
-                        buildRefreshCookie(result.refreshToken()).toString())
-                .body(result.userInfo());
+                .body(Map.of("message",
+                        "Kayıt başarılı. Lütfen e-posta adresinizi doğrulayın."));
+    }
+
+    @GetMapping("/verify-email")
+    public ResponseEntity<Map<String, String>> verifyEmail(@RequestParam String token) {
+        emailVerificationService.verifyToken(token);
+        return ResponseEntity.ok(Map.of("message", "E-posta adresiniz başarıyla doğrulandı."));
     }
 
     @PostMapping("/login")

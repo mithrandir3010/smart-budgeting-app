@@ -50,6 +50,10 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String role = "ROLE_USER";
 
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean emailVerified = false;
+
     /**
      * Kullanıcının kendi belirlediği aylık harcama limiti.
      * Null → kullanıcı henüz limit belirlememiş (opsiyonel özellik).
@@ -84,5 +88,5 @@ public class User implements UserDetails {
     public boolean isCredentialsNonExpired() { return true; }
 
     @Override
-    public boolean isEnabled() { return true; }
+    public boolean isEnabled() { return emailVerified; }
 }
