@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import UploadPage from './pages/UploadPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import ProfilePage from './pages/ProfilePage';
 
 function PrivateRoute({ element }) {
@@ -30,8 +31,9 @@ function App() {
       />
       <BrowserRouter>
         <Routes>
-          <Route path="/login"    element={<PublicRoute element={<LoginPage />} />} />
-          <Route path="/register" element={<PublicRoute element={<RegisterPage />} />} />
+          <Route path="/login"         element={<PublicRoute element={<LoginPage />} />} />
+          <Route path="/register"      element={<PublicRoute element={<RegisterPage />} />} />
+          <Route path="/verify-email"  element={<VerifyEmailPage />} />
           <Route path="/"         element={<PrivateRoute element={<DashboardPage />} />} />
           <Route path="/upload"   element={<PrivateRoute element={<UploadPage />} />} />
           <Route path="/profile"  element={<PrivateRoute element={<ProfilePage />} />} />

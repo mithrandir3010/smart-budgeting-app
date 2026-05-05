@@ -1,15 +1,15 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { register, saveAuth } from '../api/client';
+import { Link } from 'react-router-dom';
+import { register } from '../api/client';
 import { useTheme } from '../context/ThemeContext';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Mail } from 'lucide-react';
 
 export default function RegisterPage() {
-  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [form, setForm] = useState({ username: '', email: '', password: '', fullName: '' });
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState(null);
 
   const extractErrorMessage = (err) => {
     const responseData = err?.response?.data;
@@ -33,10 +33,8 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await register(form);
-      const { username, email, fullName } = res.data;
-      saveAuth({ username, email, fullName });
-      navigate('/');
+      await register(form);
+      setRegisteredEmail(form.email);
     } catch (err) {
       setError(extractErrorMessage(err));
     } finally {
@@ -62,6 +60,33 @@ export default function RegisterPage() {
       </button>
 
       <div className="w-full max-w-sm">
+        {registeredEmail ? (
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-800 px-8 py-10 text-center">
+            <div className="flex justify-center mb-4">
+              <div className="p-4 bg-indigo-50 dark:bg-indigo-950/40 rounded-full">
+                <Mail size={32} className="text-indigo-600 dark:text-indigo-400" />
+              </div>
+            </div>
+            <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
+              E-postanızı doğrulayın
+            </h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-1">
+              Doğrulama linki şu adrese gönderildi:
+            </p>
+            <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 mb-6">
+              {registeredEmail}
+            </p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-6">
+              E-posta gelmezse spam klasörünü kontrol edin. Link 24 saat geçerlidir.
+            </p>
+            <Link
+              to="/login"
+              className="text-sm text-indigo-600 dark:text-indigo-400 font-semibold hover:underline"
+            >
+              Giriş sayfasına dön
+            </Link>
+          </div>
+        ) : (
         <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-zinc-100 dark:border-zinc-800 px-8 py-10">
           <div className="text-center mb-8">
             <div className="text-5xl mb-3">💰</div>
@@ -151,6 +176,7 @@ export default function RegisterPage() {
             </Link>
           </p>
         </div>
+        )}
       </div>
     </div>
   );

@@ -87,6 +87,9 @@ export const login = (data) =>
 export const logoutApi = () =>
   client.post('/api/v1/auth/logout');
 
+export const verifyEmail = (token) =>
+  client.get('/api/v1/auth/verify-email', { params: { token } });
+
 // ── Analytics ─────────────────────────────────────────────────────────────────
 export const getAnalyticsSummary = () =>
   client.get('/api/v1/analytics/summary');
