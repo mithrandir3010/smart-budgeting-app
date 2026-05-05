@@ -3,10 +3,13 @@ package com.mali.smartbudget.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.model.User;
+import com.mali.smartbudget.repository.EmailVerificationTokenRepository;
 import com.mali.smartbudget.repository.RefreshTokenRepository;
 import com.mali.smartbudget.repository.StatementRepository;
 import com.mali.smartbudget.repository.TransactionRepository;
 import com.mali.smartbudget.repository.UserRepository;
+import com.mali.smartbudget.service.EmailService;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -44,7 +47,10 @@ class SecurityIntegrationTest {
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private TransactionRepository transactionRepository;
     @Autowired private StatementRepository statementRepository;
+    @Autowired private EmailVerificationTokenRepository emailVerificationTokenRepository;
     @Autowired private ObjectMapper objectMapper;
+
+    @MockBean private EmailService emailService;
 
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -54,6 +60,7 @@ class SecurityIntegrationTest {
         transactionRepository.deleteAll();
         statementRepository.deleteAll();
         refreshTokenRepository.deleteAll();
+        emailVerificationTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -105,15 +112,14 @@ class SecurityIntegrationTest {
     class AuthEndpointsPublic {
 
         @Test
-        @DisplayName("POST /auth/register — tokensuz erişilebilir → 201 + Set-Cookie header içerir")
-        void register_noCookie_accessible_returns201WithCookie() throws Exception {
+        @DisplayName("POST /auth/register — tokensuz erişilebilir → 201 + mesaj döner, token cookie yok")
+        void register_noCookie_accessible_returns201WithMessage() throws Exception {
             mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(registerBody("pub_reg_user")))
                     .andExpect(status().isCreated())
-                    .andExpect(cookie().exists("access_token"))
-                    .andExpect(jsonPath("$.username").value("pub_reg_user"))
-                    .andExpect(jsonPath("$.token").doesNotExist());
+                    .andExpect(jsonPath("$.message").exists())
+                    .andExpect(cookie().doesNotExist("access_token"));
         }
 
         @Test
@@ -137,6 +143,11 @@ class SecurityIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(registerBody("login_test_user")))
                     .andExpect(status().isCreated());
+
+            userRepository.findByUsername("login_test_user").ifPresent(user -> {
+                user.setEmailVerified(true);
+                userRepository.save(user);
+            });
 
             mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -348,10 +359,20 @@ class SecurityIntegrationTest {
     // =========================================================================
 
     private String registerAndGetToken(String username) throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/v1/auth/register")
+        mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(registerBody(username)))
-                .andExpect(status().isCreated())
+                .andExpect(status().isCreated());
+
+        userRepository.findByUsername(username).ifPresent(user -> {
+            user.setEmailVerified(true);
+            userRepository.save(user);
+        });
+
+        MvcResult result = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"%s\",\"password\":\"Test1234!\"}".formatted(username)))
+                .andExpect(status().isOk())
                 .andReturn();
 
         return result.getResponse().getCookie("access_token").getValue();

@@ -1,8 +1,11 @@
 package com.mali.smartbudget.security;
 
+import com.mali.smartbudget.repository.EmailVerificationTokenRepository;
 import com.mali.smartbudget.repository.RefreshTokenRepository;
 import com.mali.smartbudget.repository.UserRepository;
+import com.mali.smartbudget.service.EmailService;
 import com.mali.smartbudget.service.RateLimitingService;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,12 +39,16 @@ class RateLimitIntegrationTest {
     @Autowired MockMvc mockMvc;
     @Autowired RateLimitingService rateLimitingService;
     @Autowired RefreshTokenRepository refreshTokenRepository;
+    @Autowired EmailVerificationTokenRepository emailVerificationTokenRepository;
     @Autowired UserRepository userRepository;
+
+    @MockBean EmailService emailService;
 
     @BeforeEach
     void setUp() {
         rateLimitingService.clearAll();
         refreshTokenRepository.deleteAll();
+        emailVerificationTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 
