@@ -15,7 +15,7 @@ import java.util.Map;
 public class EmailService {
 
     private static final String RESEND_EMAILS_URL = "https://api.resend.com/emails";
-    private static final String FROM_ADDRESS = "Smart Budget <noreply@smartbudget.app>";
+    private static final String FROM_ADDRESS = "Smart Budget <onboarding@resend.dev>";
 
     private final RestClient restClient;
     private final String baseUrl;
