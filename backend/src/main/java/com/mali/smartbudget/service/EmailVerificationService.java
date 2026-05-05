@@ -39,6 +39,9 @@ public class EmailVerificationService {
                         "Geçersiz veya süresi dolmuş doğrulama linki."));
 
         if (token.isUsed()) {
+            if (token.getUser().isEmailVerified()) {
+                return; // idempotent: zaten doğrulanmış
+            }
             throw new IllegalArgumentException("Bu doğrulama linki zaten kullanılmış.");
         }
         if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
