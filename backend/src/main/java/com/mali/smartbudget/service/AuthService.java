@@ -28,6 +28,7 @@ public class AuthService implements UserDetailsService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final EmailVerificationService emailVerificationService;
+    private final EmailService emailService;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -58,8 +59,7 @@ public class AuthService implements UserDetailsService {
         userRepository.save(user);
 
         String token = emailVerificationService.createToken(user);
-        // Phase 2: emailService.sendVerificationEmail(user, token) will replace this log
-        log.info("Doğrulama token'ı oluşturuldu: username={}, token={}", user.getUsername(), token);
+        emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), token);
     }
 
     public AuthTokenResult login(LoginRequest request) {
