@@ -1,8 +1,10 @@
 package com.mali.smartbudget.controller;
 
 import com.mali.smartbudget.model.RefreshToken;
+import com.mali.smartbudget.repository.EmailVerificationTokenRepository;
 import com.mali.smartbudget.repository.RefreshTokenRepository;
 import com.mali.smartbudget.repository.UserRepository;
+import com.mali.smartbudget.service.EmailService;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -29,10 +32,15 @@ class AuthIntegrationTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private RefreshTokenRepository refreshTokenRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private EmailVerificationTokenRepository emailVerificationTokenRepository;
+
+    // Gerçek Resend HTTP çağrısını engelle
+    @MockBean private EmailService emailService;
 
     @AfterEach
     void cleanUp() {
         refreshTokenRepository.deleteAll();
+        emailVerificationTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 
@@ -47,7 +55,7 @@ class AuthIntegrationTest {
         @Test
         @DisplayName("DB'deki refresh token revoked=true olarak işaretlenir")
         void logout_setsRefreshTokenRevokedInDatabase() throws Exception {
-            MvcResult result = performRegister("logout_db_user");
+            MvcResult result = performRegisterAndLogin("logout_db_user");
             String refreshTokenValue = extractRefreshToken(result);
 
             RefreshToken before = refreshTokenRepository.findByToken(refreshTokenValue).orElseThrow();
@@ -64,7 +72,7 @@ class AuthIntegrationTest {
         @Test
         @DisplayName("access_token ve refresh_token cookie'leri sıfırlanır (maxAge=0)")
         void logout_clearsBothAuthCookies() throws Exception {
-            MvcResult result = performRegister("logout_cookie_user");
+            MvcResult result = performRegisterAndLogin("logout_cookie_user");
             String refreshTokenValue = extractRefreshToken(result);
 
             mockMvc.perform(post("/api/v1/auth/logout")
@@ -84,15 +92,13 @@ class AuthIntegrationTest {
         @Test
         @DisplayName("Logout sonrası aynı refresh token /refresh endpoint'ine gönderilirse 401 döner")
         void logout_revokedTokenCannotBeUsedToRefresh() throws Exception {
-            MvcResult result = performRegister("logout_refresh_user");
+            MvcResult result = performRegisterAndLogin("logout_refresh_user");
             String refreshTokenValue = extractRefreshToken(result);
 
-            // Token'ı iptal et
             mockMvc.perform(post("/api/v1/auth/logout")
                             .cookie(new Cookie("refresh_token", refreshTokenValue)))
                     .andExpect(status().isNoContent());
 
-            // İptal edilmiş token ile yenileme denemesi → 401
             mockMvc.perform(post("/api/v1/auth/refresh")
                             .cookie(new Cookie("refresh_token", refreshTokenValue)))
                     .andExpect(status().isUnauthorized())
@@ -111,7 +117,7 @@ class AuthIntegrationTest {
         @Test
         @DisplayName("Geçerli refresh token → 200, yeni access_token ve refresh_token cookie set edilir")
         void refresh_withValidToken_setsNewCookies() throws Exception {
-            MvcResult result = performRegister("refresh_rotate_user");
+            MvcResult result = performRegisterAndLogin("refresh_rotate_user");
             String refreshTokenValue = extractRefreshToken(result);
 
             mockMvc.perform(post("/api/v1/auth/refresh")
@@ -125,15 +131,13 @@ class AuthIntegrationTest {
         @Test
         @DisplayName("Eski refresh token rotation sonrası geçersiz hale gelir")
         void refresh_oldTokenIsRevokedAfterRotation() throws Exception {
-            MvcResult result = performRegister("refresh_old_token_user");
+            MvcResult result = performRegisterAndLogin("refresh_old_token_user");
             String oldRefreshToken = extractRefreshToken(result);
 
-            // Rotate
             mockMvc.perform(post("/api/v1/auth/refresh")
                             .cookie(new Cookie("refresh_token", oldRefreshToken)))
                     .andExpect(status().isOk());
 
-            // Eski token ile tekrar deneme → 401 (revoked)
             mockMvc.perform(post("/api/v1/auth/refresh")
                             .cookie(new Cookie("refresh_token", oldRefreshToken)))
                     .andExpect(status().isUnauthorized());
@@ -151,13 +155,29 @@ class AuthIntegrationTest {
     // Yardımcı metodlar
     // =========================================================================
 
-    private MvcResult performRegister(String username) throws Exception {
-        return mockMvc.perform(post("/api/v1/auth/register")
+    /**
+     * Kayıt ol → e-posta doğrulamasını manuel geç → login yap → token içeren MvcResult döndür.
+     */
+    private MvcResult performRegisterAndLogin(String username) throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"username":"%s","email":"%s@test.com","password":"Test1234!","fullName":"Test User"}
                                 """.formatted(username, username)))
-                .andExpect(status().isCreated())
+                .andExpect(status().isCreated());
+
+        // E-posta doğrulamasını test ortamında direkt DB'den geç
+        userRepository.findByUsername(username).ifPresent(user -> {
+            user.setEmailVerified(true);
+            userRepository.save(user);
+        });
+
+        return mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"%s","password":"Test1234!"}
+                                """.formatted(username)))
+                .andExpect(status().isOk())
                 .andReturn();
     }
 
