@@ -120,6 +120,12 @@
             <version>8.10.1</version>
         </dependency>
 
+        <!-- Flyway — DB migration yönetimi (PostgreSQL desteği flyway-core içinde) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

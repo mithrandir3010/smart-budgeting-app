@@ -55,7 +55,7 @@ public class Statement {
      * Nullable: mevcut Statement kayıtları bu alan olmadan oluşturulmuştu.
      * Yeni yüklemelerde her zaman dolu gelir.
      */
-    @Column(name = "sha256_checksum", length = 64, columnDefinition = "CHAR(64)")
+    @Column(name = "sha256_checksum", length = 64)
     private String sha256Checksum;
 
     /**
