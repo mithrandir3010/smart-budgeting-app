@@ -167,6 +167,7 @@ This spins up PostgreSQL on port `5434`. Spring Boot DDL auto will create the sc
 ### 3. Start the Backend
 
 ```bash
+cd backend
 mvn spring-boot:run
 ```
 
@@ -176,7 +177,6 @@ The API will be available at `http://localhost:8080`.
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
@@ -275,6 +275,7 @@ docker build --platform linux/amd64 -t smart-budget-backend .
 
 ```bash
 # Run all tests
+cd backend
 mvn test
 
 # Run a specific test class
@@ -298,21 +299,23 @@ The test suite covers:
 
 ```
 smart-budgeting-app/
-├── src/main/java/com/mali/smartbudget/
-│   ├── config/          # Security, CORS, data initialization
-│   ├── controller/      # REST endpoints (Auth, Statement, Analytics, Budget, Health)
-│   ├── dto/             # Request/response data transfer objects
-│   ├── exception/       # Global exception handler, custom exceptions
-│   ├── filter/          # Rate limiting filter (per-user, IP-based)
-│   ├── mcp/             # MCP tool definitions for Serena AI Coach
-│   ├── model/           # JPA entities (User, Statement, Transaction, BudgetLimit, …)
-│   ├── repository/      # Spring Data JPA repositories
-│   ├── security/        # JWT filter, JwtService
-│   ├── service/         # Business logic (Extraction, Categorization, Analytics, …)
-│   └── util/            # AmountNormalizer, PdfTextCleaner, ChecksumUtil
-├── src/main/resources/
-│   ├── application.properties        # Base config (all values env-driven)
-│   └── application-prod.properties   # Production overrides (SQL off, DDL validate)
+├── backend/
+│   ├── src/main/java/com/mali/smartbudget/
+│   │   ├── config/      # Security, CORS, data initialization
+│   │   ├── controller/  # REST endpoints (Auth, Statement, Analytics, Budget, Health)
+│   │   ├── dto/         # Request/response data transfer objects
+│   │   ├── exception/   # Global exception handler, custom exceptions
+│   │   ├── filter/      # Rate limiting filter (per-user, IP-based)
+│   │   ├── mcp/         # MCP tool definitions for Serena AI Coach
+│   │   ├── model/       # JPA entities (User, Statement, Transaction, BudgetLimit, …)
+│   │   ├── repository/  # Spring Data JPA repositories
+│   │   ├── security/    # JWT filter, JwtService
+│   │   ├── service/     # Business logic (Extraction, Categorization, Analytics, …)
+│   │   └── util/        # AmountNormalizer, PdfTextCleaner, ChecksumUtil
+│   ├── src/main/resources/
+│   │   ├── application.properties        # Base config (all values env-driven)
+│   │   └── application-prod.properties   # Production overrides (SQL off, DDL validate)
+│   └── pom.xml
 ├── frontend/
 │   └── src/
 │       ├── components/  # Reusable UI components
@@ -321,7 +324,7 @@ smart-budgeting-app/
 │       └── api/         # Axios client with interceptor-based token refresh
 ├── Dockerfile           # Multi-stage build (frontend → backend JAR → runtime)
 ├── docker-compose.yml   # Local PostgreSQL service
-└── pom.xml
+└── README.md
 ```
 
 <br>
