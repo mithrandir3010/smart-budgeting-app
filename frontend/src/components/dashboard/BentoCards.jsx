@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, Zap, Target, BarChart2 } from 'lucide-react';
+import { Zap, Target, BarChart2 } from 'lucide-react';
 import { cn, fmt } from '../../utils/helpers';
 
 const cardVariants = {
@@ -67,17 +67,15 @@ function StatCard({ index, icon: Icon, label, value, sub, accent = 'green', size
   );
 }
 
-function BudgetBar({ current, projected, budget }) {
-  const budgetNum    = Number(budget)    || 0;
-  const currentNum   = Number(current)   || 0;
-  const projectedNum = Number(projected) || 0;
+function BudgetBar({ current, budget }) {
+  const budgetNum  = Number(budget)  || 0;
+  const currentNum = Number(current) || 0;
   if (!budgetNum) return null;
 
   const max      = budgetNum * 1.4;
-  const curPct   = Math.min((currentNum   / max) * 100, 100);
-  const projPct  = Math.min((projectedNum / max) * 100, 100);
-  const limitPct = Math.min((budgetNum    / max) * 100, 100);
-  const over     = projectedNum > budgetNum;
+  const curPct   = Math.min((currentNum / max) * 100, 100);
+  const limitPct = Math.min((budgetNum  / max) * 100, 100);
+  const over     = currentNum > budgetNum;
 
   return (
     <div>
@@ -86,16 +84,6 @@ function BudgetBar({ current, projected, budget }) {
           className="absolute left-0 top-0 h-full rounded-full transition-all duration-700"
           style={{ width: `${curPct}%`, background: over ? '#f43f5e' : '#10b981' }}
         />
-        {projPct > curPct && (
-          <div
-            className="absolute top-0 h-full rounded-r-full opacity-50"
-            style={{
-              left: `${curPct}%`,
-              width: `${Math.min(projPct - curPct, 100 - curPct)}%`,
-              background: over ? '#f43f5e' : '#10b981',
-            }}
-          />
-        )}
         <div
           className="absolute top-0 h-full w-px bg-white/30"
           style={{ left: `${limitPct}%` }}
@@ -113,14 +101,13 @@ export default function BentoCards({ summary, transactions }) {
   if (!summary) return null;
 
   const {
-    totalSpending, categoryBreakdown, monthlyBudget,
-    projectedSpending, dailyRate,
+    totalSpending, categoryBreakdown, monthlyBudget, dailyRate,
   } = summary;
 
   const catCount  = Object.keys(categoryBreakdown || {}).length;
   const txCount   = transactions?.length ?? 0;
   const hasBudget = monthlyBudget != null;
-  const over      = hasBudget && Number(projectedSpending) > Number(monthlyBudget);
+  const over      = hasBudget && Number(totalSpending) > Number(monthlyBudget);
 
   const topCat = Object.entries(categoryBreakdown || {})
     .sort(([, a], [, b]) => Number(b) - Number(a))[0];
@@ -151,20 +138,10 @@ export default function BentoCards({ summary, transactions }) {
         accent="amber"
       />
 
-      {/* Card 3 — Projection */}
-      <StatCard
-        index={2}
-        icon={over ? TrendingUp : TrendingDown}
-        label="Ay Sonu Tahmini"
-        value={fmt(Number(projectedSpending) || 0)}
-        sub={over ? 'Bütçe aşımı riski' : 'Hedef dahilinde'}
-        accent={over ? 'rose' : 'green'}
-      />
-
-      {/* Card 4 — Top category */}
+      {/* Card 3 — Top category */}
       {topCat && (
         <StatCard
-          index={3}
+          index={2}
           icon={Target}
           label="En Büyük Kategori"
           value={topCat[0]}
@@ -173,11 +150,11 @@ export default function BentoCards({ summary, transactions }) {
         />
       )}
 
-      {/* Card 5 — Budget bar */}
+      {/* Card 4 — Budget bar */}
       {hasBudget && (
         <div className={topCat ? 'col-span-2 md:col-span-3' : 'col-span-2 md:col-span-4'}>
           <StatCard
-            index={4}
+            index={3}
             icon={Target}
             label="Bütçe Kullanımı"
             value={`%${Number(monthlyBudget) ? Math.round((Number(totalSpending) / Number(monthlyBudget)) * 100) : 0}`}
@@ -186,7 +163,6 @@ export default function BentoCards({ summary, transactions }) {
             extra={
               <BudgetBar
                 current={totalSpending}
-                projected={projectedSpending}
                 budget={monthlyBudget}
               />
             }

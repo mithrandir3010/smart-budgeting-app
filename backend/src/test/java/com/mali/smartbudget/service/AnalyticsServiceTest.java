@@ -222,7 +222,7 @@ class AnalyticsServiceTest {
     @DisplayName("Harcama yoksa 'veri yok' mesajı döner")
     void buildCoachAdvice_noSpending_returnsNoDataMessage() {
         String advice = analyticsService.buildCoachAdvice(
-                BigDecimal.ZERO, Map.of(), BigDecimal.ZERO, 10, null
+                BigDecimal.ZERO, Map.of(), null
         );
         assertThat(advice).contains("yok");
     }
@@ -233,8 +233,6 @@ class AnalyticsServiceTest {
         String advice = analyticsService.buildCoachAdvice(
                 new BigDecimal("3000.00"),
                 Map.of("Market", new BigDecimal("3000.00")),
-                new BigDecimal("9000.00"),
-                10,
                 null
         );
         assertThat(advice).contains("harcadın");
@@ -243,28 +241,24 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    @DisplayName("Tahmini harcama limiti aşıyorsa tavsiye aşım yüzdesini içerir")
-    void buildCoachAdvice_projectedOverLimit_containsOveragePercent() {
-        // Projected = 20.000 TL → %100 aşım (limit = 10.000)
+    @DisplayName("Toplam harcama limiti aşıyorsa tavsiye aşım mesajını içerir")
+    void buildCoachAdvice_spendingOverLimit_containsOverageMessage() {
+        // 20.000 TL harcandı, limit 10.000 TL → %100 aşım
         String advice = analyticsService.buildCoachAdvice(
-                new BigDecimal("6666.67"),
-                Map.of("Market", new BigDecimal("6666.67")),
                 new BigDecimal("20000.00"),
-                10,
+                Map.of("Market", new BigDecimal("20000.00")),
                 new BigDecimal("10000")
         );
         assertThat(advice).contains("Market");
-        assertThat(advice).contains("aşacaksın");
+        assertThat(advice).contains("aşıyorsun");
     }
 
     @Test
-    @DisplayName("Tahmini harcama limit altındaysa pozitif mesaj döner")
-    void buildCoachAdvice_projectedUnderLimit_returnsPositiveMessage() {
+    @DisplayName("Toplam harcama limit altındaysa pozitif mesaj döner")
+    void buildCoachAdvice_spendingUnderLimit_returnsPositiveMessage() {
         String advice = analyticsService.buildCoachAdvice(
                 new BigDecimal("2000.00"),
                 Map.of("Market", new BigDecimal("2000.00")),
-                new BigDecimal("6000.00"),
-                10,
                 new BigDecimal("10000")
         );
         assertThat(advice).contains("altında");
@@ -277,8 +271,6 @@ class AnalyticsServiceTest {
         String advice = analyticsService.buildCoachAdvice(
                 new BigDecimal("12000.00"),
                 Map.of("Kira", new BigDecimal("12000.00")),
-                new BigDecimal("36000.00"),
-                10,
                 new BigDecimal("10000")
         );
         assertThat(advice).doesNotContain("Kira\" harcamandan");
@@ -332,43 +324,38 @@ class AnalyticsServiceTest {
 
     @Test
     @DisplayName("Limit aşılıyorsa mesajda kategori adı ve 'kısarsan' ifadesi geçer")
-    void buildCoachAdvice_projectedOverLimit_messageContainsCategoryAndKisarsan() {
+    void buildCoachAdvice_overLimit_messageContainsCategoryAndKisarsan() {
+        // totalSpending > monthlyBudget → over-budget path
         String advice = analyticsService.buildCoachAdvice(
-                new BigDecimal("5000.00"),
-                Map.of("Market", new BigDecimal("5000.00")),
                 new BigDecimal("15000.00"),
-                10,
+                Map.of("Market", new BigDecimal("15000.00")),
                 new BigDecimal("10000")
         );
 
         assertThat(advice).contains("Market");
         assertThat(advice).contains("kısarsan");
-        assertThat(advice).contains("aşacaksın");
+        assertThat(advice).contains("aşıyorsun");
     }
 
     @Test
     @DisplayName("Yalnızca sabit kategori (Kira) varsa 'kısarsan' tavsiyesi eklenmez")
-    void buildCoachAdvice_projectedOverLimit_onlyFixedCategory_noKisarsan() {
+    void buildCoachAdvice_overLimit_onlyFixedCategory_noKisarsan() {
         String advice = analyticsService.buildCoachAdvice(
                 new BigDecimal("12000.00"),
                 Map.of("Kira", new BigDecimal("12000.00")),
-                new BigDecimal("36000.00"),
-                10,
                 new BigDecimal("10000")
         );
 
         assertThat(advice).doesNotContain("kısarsan");
-        assertThat(advice).contains("aşacaksın");
+        assertThat(advice).contains("aşıyorsun");
     }
 
     @Test
     @DisplayName("Limit altındaysa mesajda kalan bütçe miktarı geçer")
-    void buildCoachAdvice_projectedUnderLimit_messageContainsRemainingAmount() {
+    void buildCoachAdvice_underLimit_messageContainsRemainingAmount() {
         String advice = analyticsService.buildCoachAdvice(
                 new BigDecimal("2000.00"),
                 Map.of("Market", new BigDecimal("2000.00")),
-                new BigDecimal("6000.00"),
-                10,
                 new BigDecimal("10000")
         );
 
@@ -378,18 +365,16 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    @DisplayName("Tahmini harcama tam limitte (10.000) — 'altında kalıyorsun' mesajı döner")
-    void buildCoachAdvice_projectedExactlyAtLimit_returnsPositiveMessage() {
+    @DisplayName("Harcama tam limitte (10.000) — 'altındasın' mesajı döner")
+    void buildCoachAdvice_spendingExactlyAtLimit_returnsPositiveMessage() {
         String advice = analyticsService.buildCoachAdvice(
-                new BigDecimal("3333.34"),
-                Map.of("Market", new BigDecimal("3333.34")),
                 new BigDecimal("10000.00"),
-                10,
+                Map.of("Market", new BigDecimal("10000.00")),
                 new BigDecimal("10000")
         );
 
         assertThat(advice).contains("altında");
-        assertThat(advice).doesNotContain("aşacaksın");
+        assertThat(advice).doesNotContain("aşıyorsun");
     }
 
     @Test
@@ -403,8 +388,6 @@ class AnalyticsServiceTest {
         String advice = analyticsService.buildCoachAdvice(
                 new BigDecimal("3300.00"),
                 breakdown,
-                new BigDecimal("9900.00"),
-                10,
                 new BigDecimal("10000")
         );
 
@@ -413,19 +396,18 @@ class AnalyticsServiceTest {
     }
 
     @Test
-    @DisplayName("Limit aşılıyorsa mesajda tahmini ve aşım yüzdesi bulunur")
-    void buildCoachAdvice_projectedOverLimit_containsProjectedAndOveragePercent() {
+    @DisplayName("Limit aşılıyorsa mesajda harcama tutarı ve aşım yüzdesi bulunur")
+    void buildCoachAdvice_overLimit_containsSpendingAndOveragePercent() {
+        // 20.000 TL harcandı, limit 10.000 → %100 aşım
         String advice = analyticsService.buildCoachAdvice(
-                new BigDecimal("6666.67"),
-                Map.of("Restoran", new BigDecimal("6666.67")),
                 new BigDecimal("20000.00"),
-                10,
+                Map.of("Restoran", new BigDecimal("20000.00")),
                 new BigDecimal("10000")
         );
 
         assertThat(advice).contains("20");
         assertThat(advice).contains("100");
-        assertThat(advice).contains("aşacaksın");
+        assertThat(advice).contains("aşıyorsun");
     }
 
     @Test
@@ -438,8 +420,6 @@ class AnalyticsServiceTest {
         String advice = analyticsService.buildCoachAdvice(
                 new BigDecimal("11000.00"),
                 breakdown,
-                new BigDecimal("33000.00"),
-                10,
                 new BigDecimal("10000")
         );
 

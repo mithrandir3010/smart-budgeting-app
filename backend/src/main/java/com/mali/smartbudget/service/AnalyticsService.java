@@ -96,8 +96,7 @@ public class AnalyticsService {
                     .setScale(2, RoundingMode.HALF_UP);
         }
 
-        String coachAdvice = buildCoachAdvice(totalSpending, categoryBreakdown,
-                                              projectedSpending, elapsedDays, monthlyBudget);
+        String coachAdvice = buildCoachAdvice(totalSpending, categoryBreakdown, monthlyBudget);
 
         List<BudgetAlertDto> alerts = budgetLimitService.computeAlerts(userId, categoryBreakdown);
 
@@ -140,13 +139,8 @@ public class AnalyticsService {
     // Koçluk tavsiyesi üretimi
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * @param monthlyBudget Kullanıcının bütçe hedefi; null ise bütçe karşılaştırması yapılmaz.
-     */
     String buildCoachAdvice(BigDecimal totalSpending,
                             Map<String, BigDecimal> breakdown,
-                            BigDecimal projected,
-                            int dayOfMonth,
                             BigDecimal monthlyBudget) {
 
         if (totalSpending.compareTo(BigDecimal.ZERO) == 0) {
@@ -162,7 +156,7 @@ public class AnalyticsService {
 
         // Bütçe hedefi tanımlanmamışsa → sadece harcama özeti ver
         if (monthlyBudget == null) {
-            String base = "Bu ay toplam " + formatTRY(totalSpending) + " harcadın.";
+            String base = "Toplam " + formatTRY(totalSpending) + " harcadın.";
             if (topVarCategory != null) {
                 base += " En fazla harcama \"" + topVarCategory + "\" kategorisinde.";
             }
@@ -171,14 +165,14 @@ public class AnalyticsService {
         }
 
         // Bütçe hedefi var → karşılaştırmalı tavsiye
-        if (projected.compareTo(monthlyBudget) > 0) {
-            BigDecimal overage   = projected.subtract(monthlyBudget);
+        if (totalSpending.compareTo(monthlyBudget) > 0) {
+            BigDecimal overage   = totalSpending.subtract(monthlyBudget);
             double overagePct    = overage.divide(monthlyBudget, 4, RoundingMode.HALF_UP)
                                           .multiply(BigDecimal.valueOf(100))
                                           .doubleValue();
 
-            String base = "Bu hızla gidersen ay sonu tahminen %s harcayacaksın — limitini %%%s aşacaksın."
-                    .formatted(formatTRY(projected), "%.0f".formatted(overagePct));
+            String base = "Şu ana kadar %s harcadın — limitini %%%s aşıyorsun."
+                    .formatted(formatTRY(totalSpending), "%.0f".formatted(overagePct));
 
             if (topVarCategory != null) {
                 BigDecimal topAmount = breakdown.get(topVarCategory);
@@ -189,9 +183,9 @@ public class AnalyticsService {
             return base;
         }
 
-        BigDecimal remaining = monthlyBudget.subtract(projected);
-        String base = "Ay sonu tahminin %s — limitinin %s altında kalıyorsun. Harika gidiyorsun!"
-                .formatted(formatTRY(projected), formatTRY(remaining));
+        BigDecimal remaining = monthlyBudget.subtract(totalSpending);
+        String base = "Şu ana kadar %s harcadın — limitinin %s altındasın. Harika gidiyorsun!"
+                .formatted(formatTRY(totalSpending), formatTRY(remaining));
 
         if (topVarCategory != null) {
             base += " En yüksek değişken harcaman \"%s\" kategorisinde, gözünü üstünde tut."

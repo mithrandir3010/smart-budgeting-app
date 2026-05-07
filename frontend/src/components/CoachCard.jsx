@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { TrendingUp, Zap, BarChart2, Target, Loader2 } from 'lucide-react';
+import { Zap, BarChart2, Target, Loader2 } from 'lucide-react';
 
 function fmt(n) {
   return Number(n).toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' });
@@ -15,17 +15,15 @@ function fmt(n) {
 
 // ── Progress Bar ──────────────────────────────────────────────────────────────
 
-function ProgressBar({ current, projected, budget }) {
-  const budgetNum    = Number(budget)    || 0;
-  const currentNum   = Number(current)   || 0;
-  const projectedNum = Number(projected) || 0;
+function ProgressBar({ current, budget }) {
+  const budgetNum  = Number(budget)  || 0;
+  const currentNum = Number(current) || 0;
   if (budgetNum === 0) return null;
 
-  const max      = budgetNum * 1.5;
-  const curPct   = Math.min((currentNum   / max) * 100, 100);
-  const projPct  = Math.min((projectedNum / max) * 100, 100);
-  const limitPct = Math.min((budgetNum    / max) * 100, 100);
-  const isOverBudget = projectedNum > budgetNum;
+  const max          = budgetNum * 1.5;
+  const curPct       = Math.min((currentNum / max) * 100, 100);
+  const limitPct     = Math.min((budgetNum  / max) * 100, 100);
+  const isOverBudget = currentNum > budgetNum;
 
   return (
     <div className="mb-4">
@@ -34,18 +32,6 @@ function ProgressBar({ current, projected, budget }) {
           className="absolute left-0 top-0 h-full rounded-full transition-all duration-500"
           style={{ width: `${curPct}%`, background: isOverBudget ? '#f43f5e' : '#6366f1' }}
         />
-        {projPct > curPct && (
-          <div
-            className="absolute top-0 h-full rounded-r-full"
-            style={{
-              left: `${curPct}%`,
-              width: `${projPct - curPct}%`,
-              background: isOverBudget
-                ? 'repeating-linear-gradient(45deg,#fda4af,#fda4af 4px,#ffe4e6 4px,#ffe4e6 8px)'
-                : 'repeating-linear-gradient(45deg,#a5b4fc,#a5b4fc 4px,#e0e7ff 4px,#e0e7ff 8px)',
-            }}
-          />
-        )}
         <div
           className="absolute top-[-5px] w-0.5 h-5 bg-zinc-500 dark:bg-zinc-400 rounded-sm"
           style={{ left: `${limitPct}%` }}
@@ -57,9 +43,6 @@ function ProgressBar({ current, projected, budget }) {
         </span>
         <span className="text-zinc-400 dark:text-zinc-500">
           Limit: {fmt(budgetNum)}
-        </span>
-        <span className={`font-semibold ${isOverBudget ? 'text-rose-500' : 'text-emerald-500'}`}>
-          Tahmin: {fmt(projectedNum)}
         </span>
       </div>
     </div>
@@ -161,11 +144,10 @@ export default function CoachCard({ summary, onBudgetSet }) {
   // Bütçe var ama henüz veri yok → render etme
   if (!hasData) return null;
 
-  const { projectedSpending, dailyRate, monthlyBudget, totalSpending } = summary;
-  const projected    = Number(projectedSpending) || 0;
-  const budget       = Number(monthlyBudget)     || 0;
-  const isOverBudget = projected > budget;
-  const diff         = Math.abs(projected - budget);
+  const { dailyRate, monthlyBudget, totalSpending } = summary;
+  const budget       = Number(monthlyBudget) || 0;
+  const isOverBudget = Number(totalSpending) > budget;
+  const diff         = Math.abs(Number(totalSpending) - budget);
   const diffPct      = budget ? ((diff / budget) * 100).toFixed(0) : 0;
 
   return (
@@ -189,10 +171,10 @@ export default function CoachCard({ summary, onBudgetSet }) {
 
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm text-zinc-900 dark:text-zinc-100">
-            Harcama Hızı & Projeksiyon
+            Bütçe Durumu
           </p>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Ay sonu tahmini — gerçek zamanlı
+            Toplam harcama / aylık limit
           </p>
         </div>
 
@@ -210,34 +192,8 @@ export default function CoachCard({ summary, onBudgetSet }) {
 
       <ProgressBar
         current={totalSpending}
-        projected={projectedSpending}
         budget={monthlyBudget}
       />
-
-      {/* Ay sonu tahmini */}
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <TrendingUp
-          size={16}
-          strokeWidth={2}
-          className={isOverBudget ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}
-        />
-        <span className="text-sm text-zinc-500 dark:text-zinc-400">Ay sonu tahmini:</span>
-        <span className={`text-lg font-bold tracking-tight ${
-          isOverBudget ? 'text-rose-500' : 'text-emerald-700 dark:text-emerald-400'
-        }`}>
-          {fmt(projected)}
-        </span>
-
-        {isOverBudget ? (
-          <span className="bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-400 text-xs font-semibold px-2 py-0.5 rounded-full">
-            +%{diffPct} limit üstü
-          </span>
-        ) : (
-          <span className="bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-400 text-xs font-semibold px-2 py-0.5 rounded-full">
-            -%{diffPct} altında ✓
-          </span>
-        )}
-      </div>
 
       <p className={`text-xs font-medium leading-relaxed ${
         isOverBudget
@@ -245,8 +201,8 @@ export default function CoachCard({ summary, onBudgetSet }) {
           : 'text-emerald-700 dark:text-emerald-400'
       }`}>
         {isOverBudget
-          ? `Tahmini aşım: ${fmt(diff)} — günlük hızı düşürmek durumu değiştirir.`
-          : `Tahmini tasarruf: ${fmt(diff)} — limitin altında kalıyorsun.`
+          ? `Limiti ${fmt(diff)} aştın — %${diffPct} üzerinde.`
+          : `Limitin ${fmt(diff)} altındasın — %${diffPct} kullandın.`
         }
       </p>
     </div>
