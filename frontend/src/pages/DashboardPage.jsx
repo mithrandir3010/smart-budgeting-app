@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, Sun, Moon } from 'lucide-react';
 import {
   getAnalyticsSummary, getTransactions, getBudgetAlerts,
@@ -187,12 +187,14 @@ export default function DashboardPage() {
     <AppLayout sidebarProps={sidebarProps}>
 
       {/* Budget limit modal */}
-      {showLimitModal && (
-        <BudgetLimitModal
-          onClose={() => setShowLimitModal(false)}
-          onSaved={fetchAlerts}
-        />
-      )}
+      <AnimatePresence>
+        {showLimitModal && (
+          <BudgetLimitModal
+            onClose={() => setShowLimitModal(false)}
+            onSaved={fetchAlerts}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Top bar: greeting + theme toggle */}
       <div className="flex items-center justify-between mb-6">

@@ -37,6 +37,40 @@ function CategoryBadge({ category, categoryEnum }) {
   );
 }
 
+function MobileTransactionCard({ tx }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3.5
+      border-b border-zinc-100 dark:border-zinc-800/60 last:border-0"
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <CategoryBadge category={tx.category} categoryEnum={tx.categoryEnum} />
+          {tx.isInstallment && (
+            <span className="inline-flex items-center gap-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold px-1.5 py-0.5 rounded-full">
+              Taksit
+              {tx.currentInstallment != null && tx.totalInstallments != null && (
+                <span className="font-mono"> {tx.currentInstallment}/{tx.totalInstallments}</span>
+              )}
+            </span>
+          )}
+        </div>
+        <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">
+          {tx.description || '—'}
+        </p>
+        <p className="text-xs text-zinc-400 dark:text-zinc-500 font-mono mt-0.5">
+          {new Date(tx.date).toLocaleDateString('tr-TR')}
+        </p>
+      </div>
+      <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 tabular-nums whitespace-nowrap">
+        {Number(tx.amount).toLocaleString('tr-TR', {
+          style: 'currency',
+          currency: tx.currency || 'TRY',
+        })}
+      </span>
+    </div>
+  );
+}
+
 export default function TransactionsTable({ transactions }) {
   if (!transactions || transactions.length === 0) {
     return (
@@ -51,57 +85,67 @@ export default function TransactionsTable({ transactions }) {
   );
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-100 dark:border-zinc-800">
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr className="bg-zinc-50 dark:bg-zinc-800/60">
-            {['Tarih', 'Açıklama', 'Kategori', 'Tutar'].map((h) => (
-              <th
-                key={h}
-                className="px-4 py-3 text-left text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest border-b border-zinc-100 dark:border-zinc-800"
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((tx, i) => (
-            <tr
-              key={i}
-              className={`transition-colors hover:bg-indigo-50/60 dark:hover:bg-indigo-950/20 ${
-                i % 2 === 0
-                  ? 'bg-white dark:bg-zinc-900'
-                  : 'bg-zinc-50/50 dark:bg-zinc-900/40'
-              }`}
-            >
-              <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 border-b border-zinc-50 dark:border-zinc-800/50 whitespace-nowrap font-mono text-xs">
-                {new Date(tx.date).toLocaleDateString('tr-TR')}
-              </td>
-              <td className="px-4 py-3 font-medium text-zinc-800 dark:text-zinc-200 border-b border-zinc-50 dark:border-zinc-800/50">
-                <span>{tx.description || '—'}</span>
-                {tx.isInstallment && (
-                  <span className="ml-2 inline-flex items-center gap-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold px-1.5 py-0.5 rounded-full">
-                    Taksit
-                    {tx.currentInstallment != null && tx.totalInstallments != null && (
-                      <span className="font-mono"> {tx.currentInstallment}/{tx.totalInstallments}</span>
-                    )}
-                  </span>
-                )}
-              </td>
-              <td className="px-4 py-3 border-b border-zinc-50 dark:border-zinc-800/50">
-                <CategoryBadge category={tx.category} categoryEnum={tx.categoryEnum} />
-              </td>
-              <td className="px-4 py-3 text-right font-semibold text-zinc-800 dark:text-zinc-200 border-b border-zinc-50 dark:border-zinc-800/50 whitespace-nowrap tabular-nums">
-                {Number(tx.amount).toLocaleString('tr-TR', {
-                  style: 'currency',
-                  currency: tx.currency || 'TRY',
-                })}
-              </td>
+    <>
+      {/* ── Mobil kart görünümü (< md) ──────────────────────────────────── */}
+      <div className="md:hidden rounded-xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+        {sorted.map((tx, i) => (
+          <MobileTransactionCard key={i} tx={tx} />
+        ))}
+      </div>
+
+      {/* ── Masaüstü tablo görünümü (md+) ───────────────────────────────── */}
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-zinc-100 dark:border-zinc-800">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-zinc-50 dark:bg-zinc-800/60">
+              {['Tarih', 'Açıklama', 'Kategori', 'Tutar'].map((h) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-left text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest border-b border-zinc-100 dark:border-zinc-800"
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {sorted.map((tx, i) => (
+              <tr
+                key={i}
+                className={`transition-colors hover:bg-indigo-50/60 dark:hover:bg-indigo-950/20 ${
+                  i % 2 === 0
+                    ? 'bg-white dark:bg-zinc-900'
+                    : 'bg-zinc-50/50 dark:bg-zinc-900/40'
+                }`}
+              >
+                <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400 border-b border-zinc-50 dark:border-zinc-800/50 whitespace-nowrap font-mono text-xs">
+                  {new Date(tx.date).toLocaleDateString('tr-TR')}
+                </td>
+                <td className="px-4 py-3 font-medium text-zinc-800 dark:text-zinc-200 border-b border-zinc-50 dark:border-zinc-800/50">
+                  <span>{tx.description || '—'}</span>
+                  {tx.isInstallment && (
+                    <span className="ml-2 inline-flex items-center gap-0.5 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold px-1.5 py-0.5 rounded-full">
+                      Taksit
+                      {tx.currentInstallment != null && tx.totalInstallments != null && (
+                        <span className="font-mono"> {tx.currentInstallment}/{tx.totalInstallments}</span>
+                      )}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 border-b border-zinc-50 dark:border-zinc-800/50">
+                  <CategoryBadge category={tx.category} categoryEnum={tx.categoryEnum} />
+                </td>
+                <td className="px-4 py-3 text-right font-semibold text-zinc-800 dark:text-zinc-200 border-b border-zinc-50 dark:border-zinc-800/50 whitespace-nowrap tabular-nums">
+                  {Number(tx.amount).toLocaleString('tr-TR', {
+                    style: 'currency',
+                    currency: tx.currency || 'TRY',
+                  })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }

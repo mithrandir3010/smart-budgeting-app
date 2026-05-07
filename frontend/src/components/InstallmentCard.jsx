@@ -1,4 +1,9 @@
+import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '../utils/helpers';
+
 export default function InstallmentCard({ transactions }) {
+  const [open, setOpen] = useState(false);
   // Jackson is-prefix stripping güvencesi: hem isInstallment hem de installment kontrol edilir
   const installments = (transactions || []).filter(
     (tx) => tx.isInstallment === true || tx.installment === true,
@@ -34,17 +39,31 @@ export default function InstallmentCard({ transactions }) {
     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-indigo-100 dark:border-indigo-900/40 p-6">
 
       {/* Başlık */}
-      <div className="flex items-center justify-between mb-4">
+      <button
+        className="w-full flex items-center justify-between mb-4 md:cursor-default"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
         <h2 className="text-sm font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-widest">
           Taksitli İşlemler
         </h2>
-        <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold px-2.5 py-0.5 rounded-full">
-          {installments.length} işlem
-        </span>
-      </div>
+        <div className="flex items-center gap-2">
+          <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold px-2.5 py-0.5 rounded-full">
+            {installments.length} işlem
+          </span>
+          <ChevronDown
+            size={16}
+            strokeWidth={2}
+            className={cn(
+              'text-zinc-400 transition-transform duration-200 md:hidden',
+              open && 'rotate-180',
+            )}
+          />
+        </div>
+      </button>
 
-      {/* Satırlar */}
-      <div className="space-y-2.5">
+      {/* Satırlar — mobilde accordion, masaüstünde daima açık */}
+      <div className={cn('space-y-2.5', !open && 'hidden md:block')}>
         {sorted.map((tx, i) => {
           const hasFraction =
             tx.currentInstallment != null && tx.totalInstallments != null;
@@ -90,8 +109,8 @@ export default function InstallmentCard({ transactions }) {
         })}
       </div>
 
-      {/* Alt toplam */}
-      <div className="mt-4 pt-4 border-t border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between">
+      {/* Alt toplam — accordion ile birlikte aç/kapat */}
+      <div className={cn('mt-4 pt-4 border-t border-indigo-100 dark:border-indigo-900/40 flex items-center justify-between', !open && 'hidden md:flex')}>
         <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest">
           Toplam Taksit Yükü
         </span>
