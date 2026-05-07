@@ -206,7 +206,7 @@ export default function UploadPage() {
                 <p className="font-semibold text-sm text-zinc-700 dark:text-zinc-300 mb-1">
                   PDF dosyasını seçin
                 </p>
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                <p className="hidden sm:block text-xs text-zinc-400 dark:text-zinc-500">
                   veya buraya sürükleyip bırakın
                 </p>
               </>

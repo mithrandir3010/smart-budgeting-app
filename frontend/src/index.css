@@ -92,6 +92,16 @@
     animation: pulse-dot 2s ease-in-out infinite;
   }
 
+  /* ── Safe-area aware padding ───────────── */
+  /* Accounts for iPhone notch/Dynamic Island (top) and home indicator (bottom) */
+  .pt-header-safe {
+    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px) + 1.5rem);
+  }
+
+  .pb-nav-safe {
+    padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
   /* ── Legacy ─────────────────────────────── */
   .glass {
     @apply bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm;
