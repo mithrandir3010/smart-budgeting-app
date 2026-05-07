@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, User, Lock, Save, Eye, EyeOff } from 'lucide-react';
-import { getUserProfile, updateProfile, changePassword } from '../api/client';
+import { ArrowLeft, User, Lock, Save, Eye, EyeOff, FileDown, Trash2 } from 'lucide-react';
+import { getUserProfile, updateProfile, changePassword, deleteAllStatements, getAnalyticsSummary, getTransactions, getStoredUser } from '../api/client';
+import { generateReport } from '../utils/pdfReport';
 import { useTheme } from '../context/ThemeContext';
 import { Sun, Moon } from 'lucide-react';
 
@@ -52,6 +53,35 @@ export default function ProfilePage() {
   // Şifre formu
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [pwSaving, setPwSaving] = useState(false);
+
+  // Veri yönetimi
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const [summaryRes, txRes] = await Promise.all([getAnalyticsSummary(), getTransactions()]);
+      await generateReport({ summary: summaryRes.data, transactions: txRes.data, user: getStoredUser() });
+    } catch {
+      toast.error('Rapor oluşturulamadı.');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm('Tüm işlemler ve ekstre kayıtları kalıcı olarak silinecek. Emin misiniz?')) return;
+    setDeleteLoading(true);
+    try {
+      await deleteAllStatements();
+      toast.success('Tüm veriler silindi.');
+    } catch {
+      toast.error('Veriler silinirken hata oluştu.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   // Sayfa yüklenince profil çek
   useEffect(() => {
@@ -279,6 +309,51 @@ export default function ProfilePage() {
               </button>
             </div>
           </form>
+        </div>
+
+        {/* ── Veri Yönetimi ── */}
+        <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-100 dark:border-zinc-800 p-6">
+          <div className="flex items-center gap-2.5 mb-5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950 flex items-center justify-center">
+              <FileDown size={15} className="text-emerald-600 dark:text-emerald-400" strokeWidth={2} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Veri Yönetimi</h2>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500">Raporlama ve veri işlemleri</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <button
+              onClick={handleDownloadPdf}
+              disabled={pdfLoading}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
+                bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300
+                hover:bg-emerald-100 dark:hover:bg-emerald-950/70
+                active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {pdfLoading
+                ? <div className="w-4 h-4 border-2 border-emerald-500/40 border-t-emerald-500 rounded-full animate-spin" />
+                : <FileDown size={16} strokeWidth={2} />
+              }
+              {pdfLoading ? 'Rapor hazırlanıyor...' : 'PDF Rapor İndir'}
+            </button>
+
+            <button
+              onClick={handleDeleteAll}
+              disabled={deleteLoading}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
+                bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300
+                hover:bg-rose-100 dark:hover:bg-rose-950/70
+                active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deleteLoading
+                ? <div className="w-4 h-4 border-2 border-rose-500/40 border-t-rose-500 rounded-full animate-spin" />
+                : <Trash2 size={16} strokeWidth={2} />
+              }
+              {deleteLoading ? 'Siliniyor...' : 'Tüm Veriyi Sil'}
+            </button>
+          </div>
         </div>
 
       </div>

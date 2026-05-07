@@ -83,7 +83,11 @@ public class SecurityConfig {
                     "http://localhost:3000",
                     "http://127.0.0.1:3000",
                     "http://localhost:5173",
-                    "http://127.0.0.1:5173"
+                    "http://127.0.0.1:5173",
+                    // Local network — mobil test için (192.168.x.x)
+                    "http://192.168.1.100:5173",
+                    "http://192.168.1.100:5174",
+                    "http://192.168.1.100:[*]"
             ));
         }
         configuration.setAllowedOriginPatterns(originPatterns);
