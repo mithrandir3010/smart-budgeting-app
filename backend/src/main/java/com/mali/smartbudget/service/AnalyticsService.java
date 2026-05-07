@@ -69,16 +69,35 @@ public class AnalyticsService {
                     userId, totalSpending, monthlyBudget);
         }
 
-        // Ekstrenin fiili tarih aralığını kullan — bugünün ayın kaçı olduğu değil.
-        // Kredi kartı ekstresi her zaman ~30 gündür; gerçek gün sayısıyla bölerek
-        // günlük oran ve ay sonu tahmini doğru hesaplanır.
-        int statementDays = resolveStatementDays(userId);
+        // Günlük hız ve ay sonu tahmini: mevcut takvim ayının gerçek verisine dayandır.
+        // Bu sayede geçmiş aylardaki yoğun harcamalar bu ayın tahminini çarpıtmaz.
+        LocalDate today           = LocalDate.now();
+        int year                  = today.getYear();
+        int month                 = today.getMonthValue();
+        int elapsedDays           = today.getDayOfMonth();
+        int remainingDays         = today.lengthOfMonth() - elapsedDays;
 
-        BigDecimal dailyRate         = computeDailyRate(totalSpending, statementDays);
-        BigDecimal projectedSpending = dailyRate.multiply(BigDecimal.valueOf(30))
-                                                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal currentMonthSpending = transactionRepository.findMonthlyTotal(userId, year, month);
+
+        BigDecimal dailyRate;
+        BigDecimal projectedSpending;
+
+        if (currentMonthSpending.compareTo(BigDecimal.ZERO) > 0) {
+            // Bu ayda veri var → cari aya özgü günlük hız kullan
+            dailyRate         = computeDailyRate(currentMonthSpending, elapsedDays);
+            projectedSpending = currentMonthSpending
+                    .add(dailyRate.multiply(BigDecimal.valueOf(remainingDays)))
+                    .setScale(2, RoundingMode.HALF_UP);
+        } else {
+            // Bu ayda henüz işlem yok → tüm zamanların ortalamasıyla tahmin yap
+            int statementDays = resolveStatementDays(userId);
+            dailyRate         = computeDailyRate(totalSpending, statementDays);
+            projectedSpending = dailyRate.multiply(BigDecimal.valueOf(remainingDays))
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+
         String coachAdvice = buildCoachAdvice(totalSpending, categoryBreakdown,
-                                              projectedSpending, statementDays, monthlyBudget);
+                                              projectedSpending, elapsedDays, monthlyBudget);
 
         List<BudgetAlertDto> alerts = budgetLimitService.computeAlerts(userId, categoryBreakdown);
 

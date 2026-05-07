@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Repository
@@ -33,4 +34,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     @Query("SELECT MIN(t.date), MAX(t.date) FROM Transaction t WHERE t.user.id = :userId")
     List<Object[]> findDateRange(@Param("userId") Long userId);
+
+    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t WHERE t.user.id = :userId AND FUNCTION('YEAR', t.date) = :year AND FUNCTION('MONTH', t.date) = :month")
+    BigDecimal findMonthlyTotal(@Param("userId") Long userId, @Param("year") int year, @Param("month") int month);
 }
