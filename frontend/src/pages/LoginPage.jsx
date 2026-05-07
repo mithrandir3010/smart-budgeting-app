@@ -93,7 +93,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg text-sm transition-colors mt-1"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 active:scale-[0.97] disabled:opacity-60 text-white font-semibold py-2.5 rounded-lg text-sm transition-all mt-1"
             >
               {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
             </button>

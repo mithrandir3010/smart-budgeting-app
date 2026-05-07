@@ -76,7 +76,7 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
 
         <button
           onClick={() => { onLimitClick?.(); onClose?.(); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.05] transition-all min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
         >
           <ShieldAlert size={16} strokeWidth={1.8} />
           Limitler
@@ -85,7 +85,7 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
         <button
           onClick={() => { onDownloadPdf?.(); onClose?.(); }}
           disabled={pdfLoading}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-emerald-400/80 hover:text-emerald-300 hover:bg-emerald-500/[0.08] transition-all disabled:opacity-40 min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-emerald-400/80 hover:text-emerald-300 hover:bg-emerald-500/[0.08] active:scale-95 transition-all disabled:opacity-40 min-h-[44px]"
         >
           <FileDown size={16} strokeWidth={1.8} />
           {pdfLoading ? 'Hazırlanıyor...' : 'PDF İndir'}
@@ -93,7 +93,7 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
 
         <button
           onClick={() => { onDeleteAll?.(); onClose?.(); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-rose-400/70 hover:text-rose-300 hover:bg-rose-500/[0.08] transition-all min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-rose-400/70 hover:text-rose-300 hover:bg-rose-500/[0.08] active:scale-95 transition-all min-h-[44px]"
         >
           <Trash2 size={16} strokeWidth={1.8} />
           Tüm Veriyi Sil
@@ -110,7 +110,7 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
         )}
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] transition-all min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
         >
           <LogOut size={16} strokeWidth={1.8} />
           Çıkış Yap

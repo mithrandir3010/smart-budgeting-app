@@ -243,7 +243,7 @@ export default function UploadPage() {
           <button
             type="submit"
             disabled={loading || !file}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl text-sm transition-all"
           >
             {loading ? 'İşleniyor...' : 'Ekstreyi Yükle'}
           </button>

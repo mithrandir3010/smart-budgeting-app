@@ -32,16 +32,29 @@ function LoadingView() {
   return (
     <AppLayout>
       <div className="space-y-4">
+        {/* Stat cards — 2 col on mobile, 4 on desktop */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <SkeletonPulse className="col-span-2 h-28" />
-          <SkeletonPulse className="h-28" />
-          <SkeletonPulse className="h-28" />
+          <SkeletonPulse className="col-span-2 h-24 md:h-28" />
+          <SkeletonPulse className="h-24 md:h-28" />
+          <SkeletonPulse className="h-24 md:h-28" />
         </div>
+        {/* Charts — stacked on mobile, side by side on desktop */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SkeletonPulse className="h-64" />
-          <SkeletonPulse className="h-64" />
+          <SkeletonPulse className="h-52 md:h-64" />
+          <SkeletonPulse className="h-52 md:h-64" />
         </div>
-        <SkeletonPulse className="h-48" />
+        {/* AI insight + coach cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SkeletonPulse className="h-24" />
+          <SkeletonPulse className="h-24" />
+        </div>
+        {/* Transactions list */}
+        <SkeletonPulse className="h-48 md:h-64" />
+        {/* Subscription + installment — collapsed on mobile so shorter */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SkeletonPulse className="h-16 md:h-48" />
+          <SkeletonPulse className="h-16 md:h-48" />
+        </div>
       </div>
     </AppLayout>
   );
@@ -74,7 +87,7 @@ function EmptyView() {
           </p>
           <Link
             to="/upload"
-            className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-colors shadow-neon-green"
+            className="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-all shadow-neon-green"
           >
             <Upload size={15} strokeWidth={2.5} />
             Ekstre Yükle
