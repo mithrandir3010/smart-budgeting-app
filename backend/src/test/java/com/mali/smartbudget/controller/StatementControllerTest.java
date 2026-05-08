@@ -72,10 +72,11 @@ class StatementControllerTest {
             return null;
         }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
 
-        // Upload rate limit mock: varsayılan olarak limit aşılmadı (consumed = true)
+        // Rate limit mock'ları: varsayılan olarak limit aşılmadı (consumed = true)
         ConsumptionProbe allowedProbe = mock(ConsumptionProbe.class);
         when(allowedProbe.isConsumed()).thenReturn(true);
         when(rateLimitingService.tryConsumeUpload(anyString())).thenReturn(allowedProbe);
+        when(rateLimitingService.tryConsumeApi(anyString())).thenReturn(allowedProbe);
 
         testUser = User.builder()
                 .id(1L)

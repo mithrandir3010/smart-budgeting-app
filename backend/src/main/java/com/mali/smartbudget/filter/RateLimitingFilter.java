@@ -31,9 +31,9 @@ public class RateLimitingFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !rateLimitEnabled
-                || "OPTIONS".equalsIgnoreCase(request.getMethod())
-                || !request.getRequestURI().startsWith("/api/v1/auth/");
+        if (!rateLimitEnabled || "OPTIONS".equalsIgnoreCase(request.getMethod())) return true;
+        String uri = request.getRequestURI();
+        return !uri.startsWith("/api/v1/auth/") && !uri.startsWith("/api/v1/");
     }
 
     @Override
@@ -41,7 +41,10 @@ public class RateLimitingFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
         String ip = resolveClientIp(request);
-        ConsumptionProbe probe = rateLimitingService.tryConsume(ip);
+        boolean isAuthEndpoint = request.getRequestURI().startsWith("/api/v1/auth/");
+        ConsumptionProbe probe = isAuthEndpoint
+                ? rateLimitingService.tryConsume(ip)
+                : rateLimitingService.tryConsumeApi(ip);
 
         if (probe.isConsumed()) {
             response.setHeader("X-RateLimit-Remaining", String.valueOf(probe.getRemainingTokens()));
@@ -61,11 +64,15 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             response.setHeader("Vary", "Origin");
         }
 
+        String message = isAuthEndpoint
+                ? "Çok fazla giriş denemesi. Lütfen " + retryAfterSeconds + " saniye sonra tekrar deneyin."
+                : "Çok fazla istek. Lütfen " + retryAfterSeconds + " saniye sonra tekrar deneyin.";
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", LocalDateTime.now().toString());
         body.put("status", 429);
         body.put("error", "Too Many Requests");
-        body.put("message", "Çok fazla giriş denemesi. Lütfen " + retryAfterSeconds + " saniye sonra tekrar deneyin.");
+        body.put("message", message);
         body.put("retryAfterSeconds", retryAfterSeconds);
 
         response.getWriter().write(objectMapper.writeValueAsString(body));

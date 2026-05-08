@@ -25,8 +25,15 @@ public class RateLimitingService {
     @Value("${app.rate-limit.upload-refill-hours:1}")
     private int uploadRefillHours;
 
+    @Value("${app.rate-limit.api-capacity:60}")
+    private int apiCapacity;
+
+    @Value("${app.rate-limit.api-refill-minutes:1}")
+    private int apiRefillMinutes;
+
     private final Map<String, Bucket> buckets       = new ConcurrentHashMap<>();
     private final Map<String, Bucket> uploadBuckets = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> apiBuckets    = new ConcurrentHashMap<>();
 
     /** Auth endpoint'leri için IP bazlı limit. */
     public ConsumptionProbe tryConsume(String ip) {
@@ -36,6 +43,11 @@ public class RateLimitingService {
     /** Upload endpoint'i için kullanıcı bazlı limit. */
     public ConsumptionProbe tryConsumeUpload(String userId) {
         return resolveUploadBucket(userId).tryConsumeAndReturnRemaining(1);
+    }
+
+    /** Authenticated API endpoint'leri için IP bazlı genel limit. */
+    public ConsumptionProbe tryConsumeApi(String ip) {
+        return resolveApiBucket(ip).tryConsumeAndReturnRemaining(1);
     }
 
     private Bucket resolveBucket(String key) {
@@ -58,8 +70,19 @@ public class RateLimitingService {
                         .build());
     }
 
+    private Bucket resolveApiBucket(String ip) {
+        return apiBuckets.computeIfAbsent(ip, k ->
+                Bucket.builder()
+                        .addLimit(Bandwidth.builder()
+                                .capacity(apiCapacity)
+                                .refillGreedy(apiCapacity, Duration.ofMinutes(apiRefillMinutes))
+                                .build())
+                        .build());
+    }
+
     public void clearAll() {
         buckets.clear();
         uploadBuckets.clear();
+        apiBuckets.clear();
     }
 }

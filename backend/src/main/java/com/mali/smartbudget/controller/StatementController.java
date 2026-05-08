@@ -18,6 +18,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Paths;
+import java.text.Normalizer;
 
 /**
  * PDF ekstre yükleme endpoint'i.
@@ -82,8 +84,7 @@ public class StatementController {
             }
         }
 
-        String fileName = file.getOriginalFilename() != null
-                ? file.getOriginalFilename() : "ekstre.pdf";
+        String fileName = sanitizeFileName(file.getOriginalFilename());
 
         log.info("Ekstre yükleme isteği. userId={}, username={}, dosya='{}', boyut={} byte",
                 currentUser.getId(), currentUser.getUsername(), fileName, file.getSize());
@@ -115,5 +116,24 @@ public class StatementController {
             if (header[i] != PDF_MAGIC[i]) return false;
         }
         return true;
+    }
+
+    /**
+     * Dosya adını güvenli hale getirir:
+     * path traversal, unicode homoglyph ve tehlikeli karakter saldırılarını engeller.
+     */
+    private String sanitizeFileName(String raw) {
+        if (raw == null || raw.isBlank()) return "ekstre.pdf";
+        // Path traversal: sadece dosya adını al (../../etc/passwd.pdf → passwd.pdf)
+        String name = Paths.get(raw).getFileName().toString();
+        // Unicode normalizasyonu (homoglyph saldırıları)
+        name = Normalizer.normalize(name, Normalizer.Form.NFKC);
+        // Sadece güvenli karakterlere izin ver
+        name = name.replaceAll("[^a-zA-Z0-9._\\-]", "_");
+        // .pdf uzantısını garantile
+        if (!name.toLowerCase().endsWith(".pdf")) name = name + ".pdf";
+        // Maksimum 100 karakter
+        if (name.length() > 100) name = name.substring(0, 96) + ".pdf";
+        return name;
     }
 }
