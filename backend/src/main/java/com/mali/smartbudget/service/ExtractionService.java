@@ -3,6 +3,7 @@ package com.mali.smartbudget.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mali.smartbudget.dto.ExtractionResult;
 import com.mali.smartbudget.dto.TransactionDto;
 import com.mali.smartbudget.util.AmountNormalizer;
 import com.mali.smartbudget.util.PdfTextCleaner;
@@ -347,11 +348,11 @@ public class ExtractionService {
      * temiz metin yeniden kullanılır.
      *
      * @param file Kullanıcının yüklediği PDF ekstre dosyası
-     * @return Parse edilmiş TransactionDto listesi (boş olamaz — exception fırlar)
+     * @return Tespit edilen banka adı ve parse edilmiş TransactionDto listesini içeren ExtractionResult
      * @throws IOException PDF okunamazsa
      * @throws IllegalArgumentException Geçerli işlem bulunamazsa
      */
-    public List<TransactionDto> extractDtos(MultipartFile file) throws IOException {
+    public ExtractionResult extractAll(MultipartFile file) throws IOException {
         StopWatch pipelineSw = new StopWatch("ExtractionPipeline");
         pipelineSw.start("full-pipeline");
 
@@ -602,9 +603,14 @@ public class ExtractionService {
         // ── [5/5] Tamamlandı ─────────────────────────────────────────────────
         log.info("[5/5] {} DTO kategorize edildi.", total);
         pipelineSw.stop();
-        log.info("[pipeline] Extraction tamamlandı. {} DTO | toplam süre={}ms",
-                allDtos.size(), pipelineSw.getTotalTimeMillis());
-        return allDtos;
+        log.info("[pipeline] Extraction tamamlandı. {} DTO | banka={} | toplam süre={}ms",
+                allDtos.size(), bankType, pipelineSw.getTotalTimeMillis());
+        return new ExtractionResult(allDtos, bankType == BankType.UNKNOWN ? null : bankType.name());
+    }
+
+    /** Geriye dönük uyumluluk için — sadece DTO listesine ihtiyaç duyulduğunda. */
+    public List<TransactionDto> extractDtos(MultipartFile file) throws IOException {
+        return extractAll(file).dtos();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

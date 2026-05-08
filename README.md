@@ -251,6 +251,30 @@ docker build --platform linux/amd64 -t smart-budget-backend .
 
 <br>
 
+## 🔐 Privacy & Data Storage
+
+### What gets stored
+
+| Data | Stored | Deleted when you clear your data |
+|---|---|---|
+| Extracted transactions | ✅ PostgreSQL | ✅ Yes |
+| Budget limits | ✅ PostgreSQL | ✅ Yes |
+| Statement metadata (filename, date range, bank) | ✅ PostgreSQL | ✅ Yes |
+| Uploaded PDF file (anonymous copy) | ✅ PostgreSQL — no user link | ❌ Retained anonymously |
+| OpenAI prompt (transaction lines only) | Sent to OpenAI API | Not applicable — Smart Budget has no control over OpenAI's retention policy |
+
+### Why PDFs are retained anonymously
+
+When you upload a PDF, an anonymous copy is saved separately from your account — with no name, email, or any identifier attached. This copy is used solely to improve the extraction pipeline: identifying parsing errors, supporting new bank formats, and increasing accuracy over time.
+
+### Your control
+
+- **Deleting your data** (Profile → Data Management → Delete All Data) permanently removes all your transactions, statement records, and budget limits. Your account data is gone.
+- The anonymous PDF copy contains no information that can be linked back to you. It is retained only for pipeline improvement and is never shared with third parties.
+- Transaction lines are sent to OpenAI (GPT-4o-mini) for categorization. No personal identifiers are included in these prompts.
+
+<br>
+
 ## 🗺️ Roadmap
 
 | Status | Feature |

@@ -56,8 +56,10 @@ public interface StatementRepository extends JpaRepository<Statement, Long> {
               AND s.periodEnd    IS NOT NULL
               AND s.periodStart  <= :periodEnd
               AND s.periodEnd    >= :periodStart
+              AND (:bankName IS NULL OR s.bankName IS NULL OR s.bankName = :bankName)
             """)
     long countOverlappingPeriods(@Param("userId") Long userId,
                                  @Param("periodStart") LocalDate periodStart,
-                                 @Param("periodEnd") LocalDate periodEnd);
+                                 @Param("periodEnd") LocalDate periodEnd,
+                                 @Param("bankName") String bankName);
 }

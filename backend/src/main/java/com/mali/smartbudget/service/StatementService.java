@@ -1,12 +1,15 @@
 package com.mali.smartbudget.service;
 
+import com.mali.smartbudget.dto.ExtractionResult;
 import com.mali.smartbudget.dto.TransactionDto;
 import com.mali.smartbudget.exception.DuplicateStatementException;
+import com.mali.smartbudget.model.PdfArchive;
 import com.mali.smartbudget.model.Statement;
 import com.mali.smartbudget.model.StatementStatus;
 import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.model.User;
 import com.mali.smartbudget.repository.BudgetLimitRepository;
+import com.mali.smartbudget.repository.PdfArchiveRepository;
 import com.mali.smartbudget.repository.StatementRepository;
 import com.mali.smartbudget.repository.UserRepository;
 import com.mali.smartbudget.util.ChecksumUtil;
@@ -49,11 +52,12 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class StatementService {
 
-    private final StatementRepository  statementRepository;
-    private final UserRepository       userRepository;
-    private final ExtractionService    extractionService;
-    private final TransactionService   transactionService;
+    private final StatementRepository   statementRepository;
+    private final UserRepository        userRepository;
+    private final ExtractionService     extractionService;
+    private final TransactionService    transactionService;
     private final BudgetLimitRepository budgetLimitRepository;
+    private final PdfArchiveRepository  pdfArchiveRepository;
 
     /**
      * PDF ekstreyi işler: mükerrerlik kontrolü → ayıklama → dönem kontrolü → kayıt.
@@ -89,8 +93,10 @@ public class StatementService {
 
         // ── Adım 3: PDF ayıklama — saf I/O, DB'ye hiçbir şey yazılmıyor ──────
         log.info("[Upload 3/6] Extraction başlıyor (saf I/O)...");
-        List<TransactionDto> dtos = extractionService.extractDtos(file);
-        log.info("[Upload 3/6] {} DTO ayıklandı.", dtos.size());
+        ExtractionResult extraction = extractionService.extractAll(file);
+        List<TransactionDto> dtos = extraction.dtos();
+        String bankName = extraction.bankName();
+        log.info("[Upload 3/6] {} DTO ayıklandı. banka={}", dtos.size(), bankName);
 
         // ── Adım 4: Dönem hesaplama ───────────────────────────────────────────
         Optional<LocalDate> periodStart = dtos.stream()
@@ -109,7 +115,7 @@ public class StatementService {
         // ── Adım 5: Dönem çakışma kontrolü ───────────────────────────────────
         if (periodStart.isPresent() && periodEnd.isPresent()) {
             long conflictCount = statementRepository.countOverlappingPeriods(
-                    userId, periodStart.get(), periodEnd.get());
+                    userId, periodStart.get(), periodEnd.get(), bankName);
 
             if (conflictCount > 0) {
                 log.warn("[Upload 5/6] DÖNEM ÇAKIŞMASI — userId={}, dönem={} – {}, çakışan kayıt={}",
@@ -156,10 +162,19 @@ public class StatementService {
                 .uploadDate(LocalDate.now())
                 .periodStart(periodStart.orElse(null))
                 .periodEnd(periodEnd.orElse(null))
+                .bankName(bankName)
                 .status(StatementStatus.PROCESSED)
                 .build();
         statementRepository.save(statement);
         log.info("[Upload 6/6] Statement kaydedildi. id={}", statement.getId());
+
+        // ── Anonim PDF arşivi — kullanıcıdan bağımsız, pipeline geliştirme için ─
+        pdfArchiveRepository.save(PdfArchive.builder()
+                .bankName(bankName)
+                .uploadDate(LocalDate.now())
+                .pdfContent(bytes)
+                .build());
+        log.info("[Upload 6/6] PDF arşivlendi (anonim).");
 
         // ── Başarı mesajı ─────────────────────────────────────────────────────
         uploadSw.stop();

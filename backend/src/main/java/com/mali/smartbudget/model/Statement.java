@@ -69,4 +69,13 @@ public class Statement {
      * Nullable: boş ekstre veya eski kayıtlar için null olabilir.
      */
     private LocalDate periodEnd;
+
+    /**
+     * Tespit edilen banka adı (BankType.name()).
+     * Nullable: banka tespit edilemezse veya eski kayıtlar için null olabilir.
+     * Dönem çakışma kontrolünde: aynı banka + aynı dönem → mükerrer.
+     */
+    @Column(name = "bank_name", length = 50)
+    private String bankName;
+
 }
