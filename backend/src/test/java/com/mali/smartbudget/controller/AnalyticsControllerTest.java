@@ -30,7 +30,11 @@ import java.util.List;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
+import io.github.bucket4j.ConsumptionProbe;
+
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -71,6 +75,10 @@ class AnalyticsControllerTest {
             ((FilterChain) inv.getArgument(2)).doFilter(inv.getArgument(0), inv.getArgument(1));
             return null;
         }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+
+        ConsumptionProbe allowedProbe = mock(ConsumptionProbe.class);
+        when(allowedProbe.isConsumed()).thenReturn(true);
+        when(rateLimitingService.tryConsumeApi(anyString())).thenReturn(allowedProbe);
 
         testUser = User.builder()
                 .id(1L)

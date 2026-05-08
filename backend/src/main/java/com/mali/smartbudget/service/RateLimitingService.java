@@ -1,17 +1,26 @@
 package com.mali.smartbudget.service;
 
+import com.mali.smartbudget.model.RateLimitBlock;
+import com.mali.smartbudget.repository.RateLimitBlockRepository;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+@RequiredArgsConstructor
 public class RateLimitingService {
+
+    private final RateLimitBlockRepository blockRepository;
 
     @Value("${app.rate-limit.capacity:10}")
     private int capacity;
@@ -35,19 +44,71 @@ public class RateLimitingService {
     private final Map<String, Bucket> uploadBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> apiBuckets    = new ConcurrentHashMap<>();
 
-    /** Auth endpoint'leri için IP bazlı limit. */
+    /** Auth endpoint'leri için IP bazlı limit — restart'ta kaybolmaz (DB blok). */
+    @Transactional
     public ConsumptionProbe tryConsume(String ip) {
-        return resolveBucket(ip).tryConsumeAndReturnRemaining(1);
+        String key = "auth:" + ip;
+        ConsumptionProbe dbBlock = checkDbBlock(key);
+        if (dbBlock != null) return dbBlock;
+
+        ConsumptionProbe probe = resolveBucket(ip).tryConsumeAndReturnRemaining(1);
+        if (!probe.isConsumed()) {
+            persistBlock(key, Duration.ofMinutes(refillMinutes));
+        }
+        return probe;
     }
 
-    /** Upload endpoint'i için kullanıcı bazlı limit. */
+    /** Upload endpoint'i için kullanıcı bazlı limit — restart'ta kaybolmaz (DB blok). */
+    @Transactional
     public ConsumptionProbe tryConsumeUpload(String userId) {
-        return resolveUploadBucket(userId).tryConsumeAndReturnRemaining(1);
+        String key = "upload:" + userId;
+        ConsumptionProbe dbBlock = checkDbBlock(key);
+        if (dbBlock != null) return dbBlock;
+
+        ConsumptionProbe probe = resolveUploadBucket(userId).tryConsumeAndReturnRemaining(1);
+        if (!probe.isConsumed()) {
+            persistBlock(key, Duration.ofHours(uploadRefillHours));
+        }
+        return probe;
     }
 
-    /** Authenticated API endpoint'leri için IP bazlı genel limit. */
+    /** Authenticated API endpoint'leri için IP bazlı genel limit — yalnızca in-memory (1dk pencere). */
     public ConsumptionProbe tryConsumeApi(String ip) {
         return resolveApiBucket(ip).tryConsumeAndReturnRemaining(1);
+    }
+
+    /** Süresi dolmuş blokları 5 dakikada bir temizler. */
+    @Scheduled(fixedRate = 300_000)
+    @Transactional
+    public void purgeExpiredBlocks() {
+        blockRepository.deleteExpired(Instant.now());
+    }
+
+    @Transactional
+    public void clearAll() {
+        buckets.clear();
+        uploadBuckets.clear();
+        apiBuckets.clear();
+        blockRepository.deleteAll();
+    }
+
+    // ── private helpers ────────────────────────────────────────────────────────
+
+    private ConsumptionProbe checkDbBlock(String key) {
+        return blockRepository.findActiveBlock(key, Instant.now())
+                .map(block -> {
+                    long nanosToWait = Math.max(0,
+                            (block.getBlockedUntil().toEpochMilli() - Instant.now().toEpochMilli()) * 1_000_000L);
+                    return ConsumptionProbe.rejected(0, nanosToWait, nanosToWait);
+                })
+                .orElse(null);
+    }
+
+    private void persistBlock(String key, Duration refillPeriod) {
+        blockRepository.save(RateLimitBlock.builder()
+                .bucketKey(key)
+                .blockedUntil(Instant.now().plus(refillPeriod))
+                .build());
     }
 
     private Bucket resolveBucket(String key) {
@@ -78,11 +139,5 @@ public class RateLimitingService {
                                 .refillGreedy(apiCapacity, Duration.ofMinutes(apiRefillMinutes))
                                 .build())
                         .build());
-    }
-
-    public void clearAll() {
-        buckets.clear();
-        uploadBuckets.clear();
-        apiBuckets.clear();
     }
 }
