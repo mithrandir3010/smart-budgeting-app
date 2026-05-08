@@ -22,6 +22,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.test.web.servlet.MockMvc;
 
+import io.github.bucket4j.ConsumptionProbe;
+
 import java.io.IOException;
 import java.time.LocalDate;
 
@@ -69,6 +71,11 @@ class StatementControllerTest {
             ((FilterChain) inv.getArgument(2)).doFilter(inv.getArgument(0), inv.getArgument(1));
             return null;
         }).when(jwtAuthenticationFilter).doFilter(any(), any(), any());
+
+        // Upload rate limit mock: varsayılan olarak limit aşılmadı (consumed = true)
+        ConsumptionProbe allowedProbe = mock(ConsumptionProbe.class);
+        when(allowedProbe.isConsumed()).thenReturn(true);
+        when(rateLimitingService.tryConsumeUpload(anyString())).thenReturn(allowedProbe);
 
         testUser = User.builder()
                 .id(1L)
@@ -238,6 +245,7 @@ class StatementControllerTest {
     // =========================================================================
 
     private MockMultipartFile pdfFile(String filename, String content) {
-        return new MockMultipartFile("file", filename, "application/pdf", content.getBytes());
+        byte[] bytes = ("%PDF" + content).getBytes();
+        return new MockMultipartFile("file", filename, "application/pdf", bytes);
     }
 }

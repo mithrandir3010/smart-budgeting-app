@@ -1,9 +1,12 @@
 package com.mali.smartbudget.controller;
 
 import com.mali.smartbudget.model.User;
+import com.mali.smartbudget.service.RateLimitingService;
 import com.mali.smartbudget.service.StatementService;
+import io.github.bucket4j.ConsumptionProbe;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * PDF ekstre yükleme endpoint'i.
@@ -27,7 +31,10 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class StatementController {
 
-    private final StatementService statementService;
+    private static final byte[] PDF_MAGIC = {'%', 'P', 'D', 'F'};
+
+    private final StatementService    statementService;
+    private final RateLimitingService rateLimitingService;
 
     /**
      * PDF ekstre yükler, mükerrerlik kontrolü yapar ve harcamaları kaydeder.
@@ -46,6 +53,33 @@ public class StatementController {
 
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().body("Dosya boş olamaz.");
+        }
+
+        // ── Per-user upload rate limit ────────────────────────────────────────
+        ConsumptionProbe probe = rateLimitingService.tryConsumeUpload(
+                String.valueOf(currentUser.getId()));
+        if (!probe.isConsumed()) {
+            long retryAfter = (probe.getNanosToWaitForRefill() / 1_000_000_000L) + 1;
+            log.warn("Upload rate limit aşıldı. userId={}", currentUser.getId());
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .header("Retry-After", String.valueOf(retryAfter))
+                    .body("Saatlik yükleme limitine ulaştınız. Lütfen " + retryAfter + " saniye sonra tekrar deneyin.");
+        }
+
+        // ── MIME type kontrolü ────────────────────────────────────────────────
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.equalsIgnoreCase("application/pdf")) {
+            log.warn("Geçersiz MIME type. userId={}, contentType={}", currentUser.getId(), contentType);
+            return ResponseEntity.badRequest().body("Yalnızca PDF dosyaları kabul edilmektedir.");
+        }
+
+        // ── Magic bytes kontrolü (%PDF) ───────────────────────────────────────
+        try (InputStream is = file.getInputStream()) {
+            byte[] header = new byte[4];
+            if (is.read(header) < 4 || !isPdf(header)) {
+                log.warn("Geçersiz PDF magic bytes. userId={}", currentUser.getId());
+                return ResponseEntity.badRequest().body("Yalnızca PDF dosyaları kabul edilmektedir.");
+            }
         }
 
         String fileName = file.getOriginalFilename() != null
@@ -74,5 +108,12 @@ public class StatementController {
                 currentUser.getId(), currentUser.getUsername());
         statementService.deleteAllData(currentUser.getId());
         return ResponseEntity.ok("Tüm veriler silindi.");
+    }
+
+    private boolean isPdf(byte[] header) {
+        for (int i = 0; i < PDF_MAGIC.length; i++) {
+            if (header[i] != PDF_MAGIC[i]) return false;
+        }
+        return true;
     }
 }
