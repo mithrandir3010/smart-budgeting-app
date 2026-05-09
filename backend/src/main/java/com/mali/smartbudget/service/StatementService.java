@@ -38,8 +38,8 @@ import java.util.Optional;
  *       ↳ PDF okunur, LLM çağrılır, DTO listesi döner
  *  4. Dönem (periodStart/periodEnd) hesapla
  *  5. Dönem çakışma kontrolü → 409 DuplicateStatementException
- *  6. Eski transaction'ları sil (bulk DELETE) + yenilerini kaydet
- *  7. Statement metadata'yı kaydet
+ *  6. Statement metadata'yı kaydet (ID gerekli — transaction FK için)
+ *  7. Transaction'ları statement referansıyla ekle (eski veriler silinmez)
  * </pre>
  *
  * <h3>Neden bu sıra?</h3>
@@ -130,16 +130,27 @@ public class StatementService {
         }
         log.info("[Upload 5/6] Dönem kontrolü geçildi.");
 
-        // ── Adım 6: Eski transaction'ları sil + yenileri kaydet + statement kaydet ──
+        // ── Adım 6: Statement kaydet → transaction'ları statement referansıyla ekle ──
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Kullanıcı bulunamadı: " + userId));
 
-        log.info("[Upload 6/6] Eski transaction'lar siliniyor ve yenileri kaydediliyor...");
-        transactionService.deleteAllByUserId(userId);
+        Statement statement = Statement.builder()
+                .user(user)
+                .fileName(fileName)
+                .sha256Checksum(checksum)
+                .uploadDate(LocalDate.now())
+                .periodStart(periodStart.orElse(null))
+                .periodEnd(periodEnd.orElse(null))
+                .bankName(bankName)
+                .status(StatementStatus.PROCESSED)
+                .build();
+        statementRepository.save(statement);
+        log.info("[Upload 6/6] Statement kaydedildi. id={}", statement.getId());
 
         List<Transaction> transactions = dtos.stream()
                 .map(dto -> Transaction.builder()
                         .user(user)
+                        .statement(statement)
                         .date(dto.date())
                         .description(dto.description())
                         .amount(dto.amount())
@@ -154,19 +165,6 @@ public class StatementService {
                 .toList();
         List<Transaction> saved = transactionService.saveAllTransactions(transactions);
         log.info("[Upload 6/6] {} adet Transaction kaydedildi.", saved.size());
-
-        Statement statement = Statement.builder()
-                .user(user)
-                .fileName(fileName)
-                .sha256Checksum(checksum)
-                .uploadDate(LocalDate.now())
-                .periodStart(periodStart.orElse(null))
-                .periodEnd(periodEnd.orElse(null))
-                .bankName(bankName)
-                .status(StatementStatus.PROCESSED)
-                .build();
-        statementRepository.save(statement);
-        log.info("[Upload 6/6] Statement kaydedildi. id={}", statement.getId());
 
         // ── Anonim PDF arşivi — kullanıcıdan bağımsız, pipeline geliştirme için ─
         pdfArchiveRepository.save(PdfArchive.builder()
