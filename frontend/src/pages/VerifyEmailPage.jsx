@@ -72,8 +72,7 @@ export default function VerifyEmailPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center p-4"
-      style={{ background: '#050507' }}
+      className="min-h-screen flex flex-col items-center justify-center p-4 bg-zinc-50 dark:bg-[#050507]"
     >
       {/* Brand */}
       <motion.div
@@ -83,7 +82,7 @@ export default function VerifyEmailPage() {
         className="flex items-center gap-2 mb-10"
       >
         <BrandMark size={28} />
-        <span className="font-bold text-zinc-100 text-base tracking-tight">Smart Budget</span>
+        <span className="font-bold text-zinc-900 dark:text-zinc-100 text-base tracking-tight">Smart Budget</span>
       </motion.div>
 
       {/* Card */}
@@ -91,12 +90,7 @@ export default function VerifyEmailPage() {
         initial={{ opacity: 0, y: 20, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.05, ease: [0.23, 1, 0.32, 1] }}
-        className="w-full max-w-sm rounded-2xl px-8 py-10 text-center"
-        style={{
-          background:    'rgba(255,255,255,0.03)',
-          backdropFilter:'blur(20px)',
-          border:        '1px solid rgba(255,255,255,0.08)',
-        }}
+        className="w-full max-w-sm glass-card px-8 py-10 text-center"
       >
         <AnimatePresence mode="wait">
 
@@ -110,7 +104,7 @@ export default function VerifyEmailPage() {
               transition={{ duration: 0.3 }}
             >
               <Spinner />
-              <p className="text-sm font-semibold text-zinc-300 mb-1">Doğrulanıyor</p>
+              <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-1">Doğrulanıyor</p>
               <p className="text-xs text-zinc-600">Lütfen bekleyin…</p>
             </motion.div>
           )}
@@ -131,7 +125,7 @@ export default function VerifyEmailPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.4 }}
               >
-                <h2 className="text-xl font-bold text-zinc-100 mb-2">E-posta doğrulandı!</h2>
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">E-posta doğrulandı!</h2>
                 <p className="text-sm text-zinc-500 mb-7">
                   Hesabınız aktif. Artık giriş yapabilirsiniz.
                 </p>
@@ -167,7 +161,7 @@ export default function VerifyEmailPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2, duration: 0.4 }}
               >
-                <h2 className="text-xl font-bold text-zinc-100 mb-2">Doğrulama başarısız</h2>
+                <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">Doğrulama başarısız</h2>
                 <p className="text-sm text-zinc-500 mb-7 leading-relaxed">{message}</p>
                 <Link
                   to="/register"

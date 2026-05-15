@@ -63,13 +63,12 @@ export default function RegisterPage() {
 
       {/* ── Right: Form Panel ── */}
       <div
-        className="flex-1 flex flex-col items-center justify-center px-8 py-16 min-h-screen"
-        style={{ background: '#050507' }}
+        className="flex-1 flex flex-col items-center justify-center px-8 py-16 min-h-screen bg-zinc-50 dark:bg-[#050507]"
       >
         {/* Mobile brand */}
         <div className="flex lg:hidden items-center gap-2 mb-10">
           <BrandMark size={30} />
-          <span className="font-bold text-zinc-100 text-lg tracking-tight">Smart Budget</span>
+          <span className="font-bold text-zinc-900 dark:text-zinc-100 text-lg tracking-tight">Smart Budget</span>
         </div>
 
         <AnimatePresence mode="wait">
@@ -82,10 +81,7 @@ export default function RegisterPage() {
               transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
               className="w-full max-w-[360px] text-center"
             >
-              <div
-                className="rounded-2xl px-8 py-10"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
-              >
+              <div className="glass-card px-8 py-10">
                 {/* Icon */}
                 <motion.div
                   initial={{ scale: 0, rotate: -15 }}
@@ -98,7 +94,7 @@ export default function RegisterPage() {
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                  <h2 className="text-xl font-bold text-zinc-100 mb-2">E-postanızı doğrulayın</h2>
+                  <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">E-postanızı doğrulayın</h2>
                   <p className="text-sm text-zinc-500 mb-1.5">Doğrulama linki şu adrese gönderildi:</p>
                   <p className="text-sm font-semibold text-indigo-400 mb-5">{sentTo}</p>
                   <p className="text-xs text-zinc-700 mb-6">Gelmezse spam klasörünü kontrol edin. Link 24 saat geçerlidir.</p>
@@ -122,7 +118,7 @@ export default function RegisterPage() {
               transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
             >
               <div className="mb-8">
-                <h1 className="text-[28px] font-bold text-zinc-100 tracking-tight leading-tight mb-2">
+                <h1 className="text-[28px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight mb-2">
                   Hesap oluşturun
                 </h1>
                 <p className="text-[13px] text-zinc-500">
@@ -162,7 +158,7 @@ export default function RegisterPage() {
                     required
                     right={
                       <button type="button" onClick={() => setShowPass((v) => !v)} tabIndex={-1}
-                        className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                        className="text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors">
                         {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                       </button>
                     }

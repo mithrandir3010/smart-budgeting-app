@@ -68,8 +68,9 @@ function StatCard({ icon: Icon, label, value, sub, accent = 'green', size = 'sm'
       whileTap={{ scale: 0.98 }}
       className={cn(
         'relative overflow-hidden rounded-2xl p-5 cursor-default',
-        'bg-white/[0.025] backdrop-blur-md',
-        'border border-white/[0.07]',
+        'bg-white dark:bg-white/[0.025] dark:backdrop-blur-md',
+        'border border-zinc-200/80 dark:border-white/[0.07]',
+        'shadow-sm dark:shadow-none',
         a.ring,
         a.hover,
         'transition-shadow duration-300',
@@ -125,7 +126,7 @@ function BudgetBar({ current, budget }) {
 
   return (
     <div>
-      <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+      <div className="relative h-1.5 rounded-full bg-zinc-200 dark:bg-white/[0.06] overflow-hidden">
         <motion.div
           className="absolute left-0 top-0 h-full rounded-full"
           initial={{ width: 0 }}
@@ -134,7 +135,7 @@ function BudgetBar({ current, budget }) {
           style={{ background: over ? '#f43f5e' : 'linear-gradient(90deg, #10b981, #34d399)' }}
         />
         <div
-          className="absolute top-0 h-full w-px bg-white/20"
+          className="absolute top-0 h-full w-px bg-zinc-400/40 dark:bg-white/20"
           style={{ left: `${limitPct}%` }}
         />
       </div>

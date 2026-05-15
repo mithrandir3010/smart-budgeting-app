@@ -18,11 +18,11 @@ const PALETTE = [
 function CustomTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-[#111118] border border-white/[0.08] rounded-xl px-4 py-3 shadow-2xl text-sm">
-      <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-1">
+    <div className="bg-white dark:bg-[#111118] border border-zinc-200 dark:border-white/[0.08] rounded-xl px-4 py-3 shadow-2xl text-sm">
+      <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-widest mb-1">
         {payload[0].name}
       </p>
-      <p className="font-bold text-zinc-100 text-base">
+      <p className="font-bold text-zinc-900 dark:text-zinc-100 text-base">
         {fmt(payload[0].value)}
       </p>
       <p className="text-[11px] text-zinc-500 mt-0.5">
@@ -43,8 +43,8 @@ function CustomLegend({ data, total }) {
               className="w-2.5 h-2.5 rounded-full flex-shrink-0"
               style={{ background: PALETTE[i % PALETTE.length] }}
             />
-            <span className="text-xs text-zinc-400 flex-1 truncate">{item.name}</span>
-            <span className="text-xs font-semibold text-zinc-300 tabular-nums">
+            <span className="text-xs text-zinc-500 dark:text-zinc-400 flex-1 truncate">{item.name}</span>
+            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 tabular-nums">
               %{pct.toFixed(0)}
             </span>
           </div>
@@ -72,7 +72,7 @@ export default function DonutChart({ categoryBreakdown }) {
     >
       <div className="flex items-center justify-between mb-5">
         <div>
-          <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+          <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-widest">
             Kategori Dağılımı
           </p>
           <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-0.5">
@@ -83,8 +83,8 @@ export default function DonutChart({ categoryBreakdown }) {
 
       <div className="flex flex-col sm:flex-row gap-6 items-center">
         {/* Donut */}
-        <div className="relative flex-shrink-0">
-          <ResponsiveContainer width="100%" height={200}>
+        <div className="relative flex-shrink-0" style={{ width: 200, height: 200 }}>
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
@@ -115,7 +115,7 @@ export default function DonutChart({ categoryBreakdown }) {
           {/* Center label */}
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-widest">Toplam</p>
-            <p className="text-base font-bold text-zinc-100 leading-tight mt-0.5">
+            <p className="text-base font-bold text-zinc-900 dark:text-zinc-100 leading-tight mt-0.5">
               {fmt(total)}
             </p>
           </div>

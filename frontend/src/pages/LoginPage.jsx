@@ -39,13 +39,12 @@ export default function LoginPage() {
 
       {/* ── Right: Form Panel ── */}
       <div
-        className="flex-1 flex flex-col items-center justify-center px-8 py-16 min-h-screen"
-        style={{ background: '#050507' }}
+        className="flex-1 flex flex-col items-center justify-center px-8 py-16 min-h-screen bg-zinc-50 dark:bg-[#050507]"
       >
         {/* Mobile brand */}
         <div className="flex lg:hidden items-center gap-2 mb-10">
           <BrandMark size={30} />
-          <span className="font-bold text-zinc-100 text-lg tracking-tight">Smart Budget</span>
+          <span className="font-bold text-zinc-900 dark:text-zinc-100 text-lg tracking-tight">Smart Budget</span>
         </div>
 
         <motion.div
@@ -56,7 +55,7 @@ export default function LoginPage() {
         >
           {/* Heading */}
           <div className="mb-9">
-            <h1 className="text-[28px] font-bold text-zinc-100 tracking-tight leading-tight mb-2">
+            <h1 className="text-[28px] font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight mb-2">
               Tekrar hoş geldiniz
             </h1>
             <p className="text-[13px] text-zinc-500">
@@ -97,7 +96,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPass((v) => !v)}
                   tabIndex={-1}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
                 >
                   {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>

@@ -23,8 +23,8 @@ function NavItem({ to, icon: Icon, label, onClose }) {
       className={({ isActive }) => cn(
         'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
         isActive
-          ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.2)]'
-          : 'text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.05]',
+          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.2)]'
+          : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-white/[0.05]',
       )}
     >
       <Icon size={17} strokeWidth={1.8} className="flex-shrink-0" />
@@ -51,16 +51,16 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
       <div className="px-4 pt-6 pb-5">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-            <Wallet size={16} className="text-emerald-400" strokeWidth={2} />
+            <Wallet size={16} className="text-emerald-500 dark:text-emerald-400" strokeWidth={2} />
           </div>
           <div>
-            <span className="text-sm font-bold text-zinc-100 tracking-tight">SmartBudget</span>
+            <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">SmartBudget</span>
             <span className="block text-[10px] text-zinc-500 font-medium tracking-widest uppercase mt-px">Analytics</span>
           </div>
         </div>
       </div>
 
-      <div className="mx-4 mb-4 h-px bg-white/[0.06]" />
+      <div className="mx-4 mb-4 h-px bg-zinc-200 dark:bg-white/[0.06]" />
 
       {/* Navigation */}
       <nav className="flex-1 px-2 space-y-1">
@@ -71,14 +71,14 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
 
       {/* Quick actions */}
       <div className="px-2 pb-2 space-y-1">
-        <div className="mx-2 mb-2 h-px bg-white/[0.06]" />
-        <p className="px-3 text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-1">
+        <div className="mx-2 mb-2 h-px bg-zinc-200 dark:bg-white/[0.06]" />
+        <p className="px-3 text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">
           Hızlı Eylemler
         </p>
 
         <button
           onClick={() => { onLimitClick?.(); onClose?.(); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
         >
           <ShieldAlert size={16} strokeWidth={1.8} />
           Limitler
@@ -87,7 +87,7 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
         <button
           onClick={() => { onDownloadPdf?.(); onClose?.(); }}
           disabled={pdfLoading}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-emerald-400/80 hover:text-emerald-300 hover:bg-emerald-500/[0.08] active:scale-95 transition-all disabled:opacity-40 min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-emerald-600 dark:text-emerald-400/80 hover:text-emerald-700 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/[0.08] active:scale-95 transition-all disabled:opacity-40 min-h-[44px]"
         >
           <FileDown size={16} strokeWidth={1.8} />
           {pdfLoading ? 'Hazırlanıyor...' : 'PDF İndir'}
@@ -95,7 +95,7 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
 
         <button
           onClick={() => { onDeleteAll?.(); onClose?.(); }}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-rose-400/70 hover:text-rose-300 hover:bg-rose-500/[0.08] active:scale-95 transition-all min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-rose-500 dark:text-rose-400/70 hover:text-rose-600 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-500/[0.08] active:scale-95 transition-all min-h-[44px]"
         >
           <Trash2 size={16} strokeWidth={1.8} />
           Tüm Veriyi Sil
@@ -103,16 +103,16 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
       </div>
 
       {/* User profile + logout */}
-      <div className="mx-4 mt-2 mb-4 pt-4 border-t border-white/[0.06]">
+      <div className="mx-4 mt-2 mb-4 pt-4 border-t border-zinc-200 dark:border-white/[0.06]">
         {user && (
           <div className="mb-3 px-1">
-            <p className="text-xs font-semibold text-zinc-200 truncate">{user.fullName}</p>
+            <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 truncate">{user.fullName}</p>
             <p className="text-[11px] text-zinc-500 truncate mt-0.5">{user.email}</p>
           </div>
         )}
         <button
           onClick={toggleTheme}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
         >
           {theme === 'dark' ? <Sun size={16} strokeWidth={1.8} /> : <Moon size={16} strokeWidth={1.8} />}
           {theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
@@ -120,7 +120,7 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
 
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
         >
           <LogOut size={16} strokeWidth={1.8} />
           Çıkış Yap

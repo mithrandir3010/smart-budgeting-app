@@ -28,7 +28,7 @@ const TODAY = new Date().toLocaleDateString('tr-TR', {
 
 function SectionLabel({ children }) {
   return (
-    <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-3 px-0.5">
+    <p className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-600 uppercase tracking-widest mb-3 px-0.5">
       {children}
     </p>
   );
@@ -80,7 +80,7 @@ function EmptyView() {
           <Upload size={40} className="text-zinc-500" strokeWidth={1.5} />
         </motion.div>
         <motion.div {...fadeUp(0.15)} className="text-center">
-          <p className="text-lg font-semibold text-zinc-300 mb-1">Henüz ekstre yüklenmedi</p>
+          <p className="text-lg font-semibold text-zinc-700 dark:text-zinc-300 mb-1">Henüz ekstre yüklenmedi</p>
           <p className="text-sm text-zinc-600 mb-6">İlk ekstrenizi yükleyerek analizlere başlayın.</p>
           <Link
             to="/upload"
@@ -187,7 +187,7 @@ export default function DashboardPage() {
       {/* ── Greeting ── */}
       <motion.div {...fadeUp(0)} className="mb-7">
         <p className="text-[11px] text-zinc-600 font-medium mb-1 capitalize">{TODAY}</p>
-        <h1 className="text-2xl font-bold text-zinc-100 tracking-tight leading-tight">
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight leading-tight">
           {currentUser
             ? <>Merhaba, <span className="text-neon-green">{currentUser.fullName.split(' ')[0]}</span> 👋</>
             : 'Dashboard'
