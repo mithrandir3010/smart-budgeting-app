@@ -11,8 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,32 +67,10 @@ public class AnalyticsService {
                     userId, totalSpending, monthlyBudget);
         }
 
-        // Günlük hız ve ay sonu tahmini: mevcut takvim ayının gerçek verisine dayandır.
-        // Bu sayede geçmiş aylardaki yoğun harcamalar bu ayın tahminini çarpıtmaz.
-        LocalDate today           = LocalDate.now();
-        int year                  = today.getYear();
-        int month                 = today.getMonthValue();
-        int elapsedDays           = today.getDayOfMonth();
-        int remainingDays         = today.lengthOfMonth() - elapsedDays;
-
-        BigDecimal currentMonthSpending = transactionRepository.findMonthlyTotal(userId, year, month);
-
-        BigDecimal dailyRate;
-        BigDecimal projectedSpending;
-
-        if (currentMonthSpending.compareTo(BigDecimal.ZERO) > 0) {
-            // Bu ayda veri var → cari aya özgü günlük hız kullan
-            dailyRate         = computeDailyRate(currentMonthSpending, elapsedDays);
-            projectedSpending = currentMonthSpending
-                    .add(dailyRate.multiply(BigDecimal.valueOf(remainingDays)))
-                    .setScale(2, RoundingMode.HALF_UP);
-        } else {
-            // Bu ayda henüz işlem yok → tüm zamanların ortalamasıyla tahmin yap
-            int statementDays = resolveStatementDays(userId);
-            dailyRate         = computeDailyRate(totalSpending, statementDays);
-            projectedSpending = dailyRate.multiply(BigDecimal.valueOf(remainingDays))
-                    .setScale(2, RoundingMode.HALF_UP);
-        }
+        // Günlük hız: toplam harcama / 30 (standart ekstre süresi)
+        BigDecimal dailyRate = computeDailyRate(totalSpending, 30);
+        BigDecimal projectedSpending = dailyRate.multiply(BigDecimal.valueOf(30))
+                .setScale(2, RoundingMode.HALF_UP);
 
         String coachAdvice = buildCoachAdvice(totalSpending, categoryBreakdown, monthlyBudget);
 
@@ -114,21 +90,7 @@ public class AnalyticsService {
     // Günlük harcama hızı
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Kullanıcının işlemlerindeki ilk-son tarih arasındaki gün sayısını döner.
-     * Ekstre her zaman ~30 gündür; gerçek aralık 1'den küçük olamaz.
-     * Veri yoksa ya da tek günse 30 (standart ekstre süresi) kullanılır.
-     */
-    private int resolveStatementDays(Long userId) {
-        List<Object[]> range = transactionRepository.findDateRange(userId);
-        if (range.isEmpty() || range.get(0)[0] == null) return 30;
-        LocalDate minDate = (LocalDate) range.get(0)[0];
-        LocalDate maxDate = (LocalDate) range.get(0)[1];
-        int days = (int) ChronoUnit.DAYS.between(minDate, maxDate) + 1;
-        return Math.max(days, 1);
-    }
-
-    BigDecimal computeDailyRate(BigDecimal totalSpending, int statementDays) {
+BigDecimal computeDailyRate(BigDecimal totalSpending, int statementDays) {
         if (statementDays <= 0 || totalSpending.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
