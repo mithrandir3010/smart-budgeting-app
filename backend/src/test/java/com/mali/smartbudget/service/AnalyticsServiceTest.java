@@ -20,7 +20,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
@@ -44,10 +43,6 @@ class AnalyticsServiceTest {
         org.mockito.Mockito.lenient()
                 .when(userRepository.findById(anyLong()))
                 .thenReturn(Optional.empty());  // monthlyBudget → null
-        // Varsayılan: bu ay işlem yok → fallback all-time hesaplama yolu
-        org.mockito.Mockito.lenient()
-                .when(transactionRepository.findMonthlyTotal(anyLong(), anyInt(), anyInt()))
-                .thenReturn(BigDecimal.ZERO);
     }
 
     // ── Yardımcı: belirli bütçeyle kullanıcı stub'u ──────────────────────────
@@ -281,9 +276,6 @@ class AnalyticsServiceTest {
     void getSummary_returnsProjectionFields() {
         when(transactionRepository.findCategoryTotals(USER_ID))
                 .thenReturn(rows(row("Market", "3000.00")));
-        // Cari ay verisi var → current-month path; günlük hız her zaman pozitif
-        when(transactionRepository.findMonthlyTotal(anyLong(), anyInt(), anyInt()))
-                .thenReturn(new BigDecimal("3000.00"));
 
         AnalyticsSummaryDto result = analyticsService.getSummary(USER_ID);
 
@@ -436,13 +428,9 @@ class AnalyticsServiceTest {
     void getSummary_projectedSpending_atLeastCurrentMonthSpending() {
         when(transactionRepository.findCategoryTotals(USER_ID))
                 .thenReturn(rows(row("Market", "3000.00")));
-        // Tüm harcama cari ayda → current-month daily rate ile kalan günler eklenir
-        when(transactionRepository.findMonthlyTotal(anyLong(), anyInt(), anyInt()))
-                .thenReturn(new BigDecimal("3000.00"));
 
         AnalyticsSummaryDto result = analyticsService.getSummary(USER_ID);
 
-        // projectedSpending = currentMonthSpending + dailyRate × remainingDays ≥ currentMonthSpending
         assertThat(result.projectedSpending())
                 .isGreaterThanOrEqualTo(new BigDecimal("3000.00"));
     }
@@ -463,9 +451,6 @@ class AnalyticsServiceTest {
     void getSummary_nonZeroSpending_dailyRateIsPositive() {
         when(transactionRepository.findCategoryTotals(USER_ID))
                 .thenReturn(rows(row("Kafe", "500.00")));
-        // Cari ay verisi var → günlük hız her zaman pozitif (tarih bağımsız)
-        when(transactionRepository.findMonthlyTotal(anyLong(), anyInt(), anyInt()))
-                .thenReturn(new BigDecimal("500.00"));
 
         AnalyticsSummaryDto result = analyticsService.getSummary(USER_ID);
 

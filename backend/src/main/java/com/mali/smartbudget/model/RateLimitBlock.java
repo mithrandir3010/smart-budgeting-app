@@ -23,6 +23,6 @@ public class RateLimitBlock {
     @Column(name = "bucket_key", length = 100)
     private String bucketKey;
 
-    @Column(name = "blocked_until", nullable = false, columnDefinition = "timestamptz")
+    @Column(name = "blocked_until", nullable = false)
     private Instant blockedUntil;
 }
