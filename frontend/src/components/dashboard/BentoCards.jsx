@@ -1,64 +1,110 @@
 import { motion } from 'framer-motion';
-import { Zap, Target, BarChart2 } from 'lucide-react';
+import { Zap, Target, BarChart2, TrendingUp } from 'lucide-react';
 import { cn, fmt } from '../../utils/helpers';
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 20, scale: 0.97 },
-  visible: (i) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { delay: i * 0.07, duration: 0.45, ease: [0.23, 1, 0.32, 1] },
-  }),
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
 };
 
-function StatCard({ index, icon: Icon, label, value, sub, accent = 'green', size = 'sm', extra }) {
-  const accents = {
-    green:  { text: 'text-emerald-400', glow: 'shadow-card-glow-green', dot: 'bg-emerald-400', border: 'border-emerald-500/20' },
-    amber:  { text: 'text-amber-400',   glow: 'shadow-card-glow-amber', dot: 'bg-amber-400',   border: 'border-amber-500/20' },
-    rose:   { text: 'text-rose-400',    glow: 'shadow-card-glass',      dot: 'bg-rose-400',    border: 'border-rose-500/20' },
-    indigo: { text: 'text-indigo-400',  glow: 'shadow-card-glass',      dot: 'bg-indigo-400',  border: 'border-indigo-500/20' },
-  };
-  const a = accents[accent];
+const cardVariants = {
+  hidden:  { opacity: 0, y: 24, scale: 0.96 },
+  visible: {
+    opacity: 1, y: 0, scale: 1,
+    transition: { duration: 0.5, ease: [0.23, 1, 0.32, 1] },
+  },
+};
+
+const ACCENTS = {
+  green:  {
+    text:   'text-emerald-400',
+    dim:    'text-emerald-500/70',
+    dot:    'bg-emerald-400',
+    ring:   'shadow-[0_0_28px_rgba(16,185,129,0.12)]',
+    hover:  'hover:shadow-[0_0_40px_rgba(16,185,129,0.2)]',
+    glow:   'from-emerald-500/[0.07] via-transparent',
+    border: 'border-emerald-500/[0.12]',
+    badge:  'bg-emerald-500/10 text-emerald-400',
+  },
+  amber:  {
+    text:   'text-amber-400',
+    dim:    'text-amber-500/70',
+    dot:    'bg-amber-400',
+    ring:   'shadow-[0_0_28px_rgba(245,158,11,0.12)]',
+    hover:  'hover:shadow-[0_0_40px_rgba(245,158,11,0.2)]',
+    glow:   'from-amber-500/[0.07] via-transparent',
+    border: 'border-amber-500/[0.12]',
+    badge:  'bg-amber-500/10 text-amber-400',
+  },
+  rose:   {
+    text:   'text-rose-400',
+    dim:    'text-rose-500/70',
+    dot:    'bg-rose-400',
+    ring:   'shadow-[0_0_28px_rgba(244,63,94,0.12)]',
+    hover:  'hover:shadow-[0_0_40px_rgba(244,63,94,0.2)]',
+    glow:   'from-rose-500/[0.07] via-transparent',
+    border: 'border-rose-500/[0.12]',
+    badge:  'bg-rose-500/10 text-rose-400',
+  },
+  indigo: {
+    text:   'text-indigo-400',
+    dim:    'text-indigo-500/70',
+    dot:    'bg-indigo-400',
+    ring:   'shadow-[0_0_28px_rgba(99,102,241,0.12)]',
+    hover:  'hover:shadow-[0_0_40px_rgba(99,102,241,0.2)]',
+    glow:   'from-indigo-500/[0.07] via-transparent',
+    border: 'border-indigo-500/[0.12]',
+    badge:  'bg-indigo-500/10 text-indigo-400',
+  },
+};
+
+function StatCard({ icon: Icon, label, value, sub, accent = 'green', size = 'sm', extra }) {
+  const a = ACCENTS[accent];
 
   return (
     <motion.div
-      custom={index}
       variants={cardVariants}
-      initial="hidden"
-      animate="visible"
+      whileHover={{ scale: 1.02, y: -3, transition: { duration: 0.2, ease: 'easeOut' } }}
+      whileTap={{ scale: 0.98 }}
       className={cn(
-        'relative overflow-hidden',
-        'glass-card p-5',
-        a.glow,
+        'relative overflow-hidden rounded-2xl p-5 cursor-default',
+        'bg-white/[0.025] backdrop-blur-md',
+        'border border-white/[0.07]',
+        a.ring,
+        a.hover,
+        'transition-shadow duration-300',
       )}
     >
-      {/* Subtle background glow */}
+      {/* Corner glow */}
       <div className={cn(
-        'absolute inset-0 opacity-0 dark:opacity-100 pointer-events-none',
-        accent === 'green' && 'bg-gradient-radial from-emerald-500/5 via-transparent to-transparent',
-        accent === 'amber' && 'bg-gradient-radial from-amber-500/5 via-transparent to-transparent',
+        'absolute -top-10 -left-10 w-32 h-32 rounded-full blur-2xl pointer-events-none',
+        `bg-gradient-radial ${a.glow} to-transparent opacity-60`,
       )} />
 
       <div className="relative">
-        <div className="flex items-start justify-between mb-3">
-          <div className={cn('p-2 rounded-xl', `dark:bg-white/[0.06] bg-zinc-100`)}>
-            <Icon size={16} strokeWidth={1.8} className={cn(a.text, 'opacity-90')} />
+        <div className="flex items-start justify-between mb-4">
+          <div className={cn('p-2 rounded-xl bg-white/[0.06]', a.border, 'border')}>
+            <Icon size={15} strokeWidth={1.8} className={a.text} />
           </div>
-          <span className={cn('w-2 h-2 rounded-full dot-pulse', a.dot)} />
+          <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold', a.badge)}>
+            <span className={cn('w-1.5 h-1.5 rounded-full dot-pulse', a.dot)} />
+            live
+          </span>
         </div>
 
-        <p className="text-xs font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest mb-1">
+        <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1.5">
           {label}
         </p>
         <p className={cn(
           'font-bold tracking-tight leading-none',
-          size === 'lg' ? 'text-3xl' : 'text-xl',
+          size === 'lg' ? 'text-[2rem]' : 'text-xl',
           a.text,
         )}>
           {value}
         </p>
 
         {sub && (
-          <p className="text-xs text-zinc-500 dark:text-zinc-500 mt-2 leading-snug">{sub}</p>
+          <p className="text-[11px] text-zinc-600 mt-2 leading-snug">{sub}</p>
         )}
 
         {extra && <div className="mt-3">{extra}</div>}
@@ -79,17 +125,20 @@ function BudgetBar({ current, budget }) {
 
   return (
     <div>
-      <div className="relative h-1.5 rounded-full bg-zinc-200 dark:bg-white/[0.08] overflow-hidden">
-        <div
-          className="absolute left-0 top-0 h-full rounded-full transition-all duration-700"
-          style={{ width: `${curPct}%`, background: over ? '#f43f5e' : '#10b981' }}
+      <div className="relative h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+        <motion.div
+          className="absolute left-0 top-0 h-full rounded-full"
+          initial={{ width: 0 }}
+          animate={{ width: `${curPct}%` }}
+          transition={{ duration: 1, delay: 0.4, ease: [0.23, 1, 0.32, 1] }}
+          style={{ background: over ? '#f43f5e' : 'linear-gradient(90deg, #10b981, #34d399)' }}
         />
         <div
-          className="absolute top-0 h-full w-px bg-white/30"
+          className="absolute top-0 h-full w-px bg-white/20"
           style={{ left: `${limitPct}%` }}
         />
       </div>
-      <div className="flex justify-between mt-1.5 text-[10px] text-zinc-500">
+      <div className="flex justify-between mt-1.5 text-[10px] text-zinc-600">
         <span>Şu an {fmt(currentNum)}</span>
         <span>Limit {fmt(budgetNum)}</span>
       </div>
@@ -100,9 +149,7 @@ function BudgetBar({ current, budget }) {
 export default function BentoCards({ summary, transactions }) {
   if (!summary) return null;
 
-  const {
-    totalSpending, categoryBreakdown, monthlyBudget, dailyRate,
-  } = summary;
+  const { totalSpending, categoryBreakdown, monthlyBudget, dailyRate } = summary;
 
   const catCount  = Object.keys(categoryBreakdown || {}).length;
   const txCount   = transactions?.length ?? 0;
@@ -113,12 +160,14 @@ export default function BentoCards({ summary, transactions }) {
     .sort(([, a], [, b]) => Number(b) - Number(a))[0];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-
-      {/* Card 1 — Total (large) */}
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4"
+    >
       <div className="col-span-2">
         <StatCard
-          index={0}
           icon={BarChart2}
           label="Toplam Harcama"
           value={fmt(totalSpending)}
@@ -128,20 +177,16 @@ export default function BentoCards({ summary, transactions }) {
         />
       </div>
 
-      {/* Card 2 — Daily rate */}
       <StatCard
-        index={1}
         icon={Zap}
         label="Günlük Hız"
         value={fmt(Number(dailyRate) || 0)}
-        sub="Ortalama günlük harcama"
+        sub="Ortalama günlük"
         accent="amber"
       />
 
-      {/* Card 3 — Top category */}
       {topCat && (
         <StatCard
-          index={2}
           icon={Target}
           label="En Büyük Kategori"
           value={topCat[0]}
@@ -150,26 +195,18 @@ export default function BentoCards({ summary, transactions }) {
         />
       )}
 
-      {/* Card 4 — Budget bar */}
       {hasBudget && (
         <div className={topCat ? 'col-span-2 md:col-span-3' : 'col-span-2 md:col-span-4'}>
           <StatCard
-            index={3}
-            icon={Target}
+            icon={TrendingUp}
             label="Bütçe Kullanımı"
             value={`%${Number(monthlyBudget) ? Math.round((Number(totalSpending) / Number(monthlyBudget)) * 100) : 0}`}
             sub={`${fmt(totalSpending)} / ${fmt(monthlyBudget)}`}
             accent={over ? 'rose' : 'green'}
-            extra={
-              <BudgetBar
-                current={totalSpending}
-                budget={monthlyBudget}
-              />
-            }
+            extra={<BudgetBar current={totalSpending} budget={monthlyBudget} />}
           />
         </div>
       )}
-
-    </div>
+    </motion.div>
   );
 }

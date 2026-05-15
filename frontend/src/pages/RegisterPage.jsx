@@ -1,61 +1,51 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, AtSign, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { register } from '../api/client';
-import { User, AtSign, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import VisionPanel, { BrandMark } from '../components/auth/VisionPanel';
 
-function BrandMark({ size = 36 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 36 36" fill="none">
-      <rect width="36" height="36" rx="10" fill="#6366F1" />
-      <rect x="7"  y="22" width="5" height="8"  rx="1.5" fill="white" fillOpacity="0.55" />
-      <rect x="14" y="15" width="5" height="15" rx="1.5" fill="white" fillOpacity="0.8"  />
-      <rect x="21" y="8"  width="5" height="22" rx="1.5" fill="white" />
-      <circle cx="29" cy="7" r="3" fill="#A5F3FC" />
-    </svg>
-  );
-}
+const inputCls =
+  'w-full rounded-xl bg-white/[0.04] border border-white/[0.08] text-zinc-100 ' +
+  'placeholder-zinc-600 px-4 py-2.5 text-sm ' +
+  'focus:outline-none focus:border-indigo-500/50 ' +
+  'focus:ring-2 focus:ring-indigo-500/30 focus:shadow-[0_0_15px_rgba(99,102,241,0.18)] ' +
+  'transition-all duration-200 disabled:opacity-40';
 
-function InputField({ icon: Icon, label, name, type = 'text', value, onChange, placeholder, required, rightElement }) {
+const labelCls = 'block text-[11px] font-semibold text-zinc-500 uppercase tracking-widest mb-1.5';
+
+function IconInput({ icon: Icon, name, type = 'text', value, onChange, placeholder, required, right }) {
   return (
-    <div className="space-y-1.5">
-      <label className="block text-xs font-medium text-zinc-400 tracking-wide">
-        {label}
-      </label>
-      <div className="relative">
-        <Icon size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
-        <input
-          name={name}
-          type={type}
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          required={required}
-          className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-zinc-800/60 border border-zinc-700/60 text-zinc-100 placeholder-zinc-600 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500/50 transition-all"
-        />
-        {rightElement && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-            {rightElement}
-          </div>
-        )}
-      </div>
+    <div className="relative">
+      <Icon size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+      <input
+        name={name}
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        className={inputCls + ' pl-10' + (right ? ' pr-11' : '')}
+      />
+      {right && <div className="absolute right-3.5 top-1/2 -translate-y-1/2">{right}</div>}
     </div>
   );
 }
 
-export default function RegisterPage() {
-  const [form, setForm] = useState({ username: '', email: '', password: '', fullName: '' });
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
+function extractErrorMessage(err) {
+  const d = err?.response?.data;
+  if (typeof d?.message === 'string' && d.message.trim()) return d.message;
+  if (typeof d === 'string' && d.trim()) return d;
+  if (!err?.response) return 'Sunucuya bağlanılamadı.';
+  return 'Kayıt oluşturulamadı.';
+}
 
-  const extractErrorMessage = (err) => {
-    const responseData = err?.response?.data;
-    if (typeof responseData?.message === 'string' && responseData.message.trim()) return responseData.message;
-    if (typeof responseData === 'string' && responseData.trim()) return responseData;
-    if (!err?.response) return 'Sunucuya bağlanılamadı.';
-    return 'Kayıt oluşturulamadı.';
-  };
+export default function RegisterPage() {
+  const [form,     setForm]     = useState({ username: '', email: '', password: '', fullName: '' });
+  const [error,    setError]    = useState(null);
+  const [loading,  setLoading]  = useState(false);
+  const [sentTo,   setSentTo]   = useState(null);
+  const [showPass, setShowPass] = useState(false);
 
   const handleChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -65,7 +55,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register(form);
-      setRegisteredEmail(form.email);
+      setSentTo(form.email);
     } catch (err) {
       setError(extractErrorMessage(err));
     } finally {
@@ -74,108 +64,174 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        {registeredEmail ? (
-          <div className="bg-zinc-900 rounded-2xl border border-zinc-800 px-8 py-10 text-center">
-            <div className="flex justify-center mb-4">
-              <div className="p-4 bg-indigo-500/10 rounded-full">
-                <Mail size={32} className="text-indigo-400" />
-              </div>
-            </div>
-            <h2 className="text-xl font-bold text-zinc-100 mb-2">E-postanızı doğrulayın</h2>
-            <p className="text-sm text-zinc-500 mb-1">Doğrulama linki şu adrese gönderildi:</p>
-            <p className="text-sm font-semibold text-indigo-400 mb-6">{registeredEmail}</p>
-            <p className="text-xs text-zinc-600 mb-6">
-              E-posta gelmezse spam klasörünü kontrol edin. Link 24 saat geçerlidir.
-            </p>
-            <Link to="/login" className="text-sm text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
-              Giriş sayfasına dön
-            </Link>
-          </div>
-        ) : (
-          <div className="bg-zinc-900 rounded-2xl border border-zinc-800 px-8 py-10">
-            <div className="flex flex-col items-center mb-8">
-              <BrandMark size={40} />
-              <h1 className="text-xl font-bold text-zinc-100 tracking-tight mt-3">Hesap oluştur</h1>
-              <p className="text-sm text-zinc-500 mt-1">Smart Budget'a hoş geldiniz</p>
-            </div>
+    <div className="min-h-screen flex">
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <InputField
-                icon={User}
-                label="Ad Soyad"
-                name="fullName"
-                value={form.fullName}
-                onChange={handleChange}
-                placeholder="Adınız ve soyadınız"
-                required
-              />
+      {/* ── Left: Vision Panel ── */}
+      <VisionPanel variant="register" />
 
-              <InputField
-                icon={AtSign}
-                label="Kullanıcı Adı"
-                name="username"
-                value={form.username}
-                onChange={handleChange}
-                placeholder="kullaniciadi"
-                required
-              />
+      {/* ── Right: Form Panel ── */}
+      <div
+        className="flex-1 flex flex-col items-center justify-center px-8 py-16 min-h-screen"
+        style={{ background: '#050507' }}
+      >
+        {/* Mobile brand */}
+        <div className="flex lg:hidden items-center gap-2 mb-10">
+          <BrandMark size={30} />
+          <span className="font-bold text-zinc-100 text-lg tracking-tight">Smart Budget</span>
+        </div>
 
-              <InputField
-                icon={Mail}
-                label="E-posta"
-                name="email"
-                type="email"
-                value={form.email}
-                onChange={handleChange}
-                placeholder="ad@ornek.com"
-                required
-              />
-
-              <InputField
-                icon={Lock}
-                label="Şifre"
-                name="password"
-                type={showPassword ? 'text' : 'password'}
-                value={form.password}
-                onChange={handleChange}
-                placeholder="En az 6 karakter"
-                required
-                rightElement={
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                  >
-                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                }
-              />
-
-              {error && (
-                <div className="bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl px-4 py-3 text-xs">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-all mt-2"
+        <AnimatePresence mode="wait">
+          {sentTo ? (
+            /* ── Success state ── */
+            <motion.div
+              key="success"
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+              className="w-full max-w-[360px] text-center"
+            >
+              <div
+                className="rounded-2xl px-8 py-10"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
               >
-                {loading ? 'Kaydediliyor...' : 'Kayıt Ol'}
-              </button>
-            </form>
+                {/* Icon */}
+                <motion.div
+                  initial={{ scale: 0, rotate: -15 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ delay: 0.15, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+                  className="w-16 h-16 rounded-2xl mx-auto mb-5 flex items-center justify-center"
+                  style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.2)' }}
+                >
+                  <Mail size={30} className="text-emerald-400" strokeWidth={1.5} />
+                </motion.div>
 
-            <p className="text-center text-xs text-zinc-600 mt-6">
-              Zaten hesabınız var mı?{' '}
-              <Link to="/login" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
-                Giriş Yap
-              </Link>
-            </p>
-          </div>
-        )}
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                  <h2 className="text-xl font-bold text-zinc-100 mb-2">E-postanızı doğrulayın</h2>
+                  <p className="text-sm text-zinc-500 mb-1.5">Doğrulama linki şu adrese gönderildi:</p>
+                  <p className="text-sm font-semibold text-indigo-400 mb-5">{sentTo}</p>
+                  <p className="text-xs text-zinc-700 mb-6">Gelmezse spam klasörünü kontrol edin. Link 24 saat geçerlidir.</p>
+                  <Link
+                    to="/login"
+                    className="text-sm text-indigo-400 font-semibold hover:text-indigo-300 transition-colors"
+                  >
+                    Giriş sayfasına dön →
+                  </Link>
+                </motion.div>
+              </div>
+            </motion.div>
+          ) : (
+            /* ── Form ── */
+            <motion.div
+              key="form"
+              className="w-full max-w-[360px]"
+              initial={{ opacity: 0, x: -24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -24 }}
+              transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
+            >
+              <div className="mb-8">
+                <h1 className="text-[28px] font-bold text-zinc-100 tracking-tight leading-tight mb-2">
+                  Hesap oluşturun
+                </h1>
+                <p className="text-[13px] text-zinc-500">
+                  Smart Budget'a katılın, finanslarınızı kontrol edin.
+                </p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+
+                <div>
+                  <label className={labelCls}>Ad Soyad</label>
+                  <IconInput icon={User} name="fullName" value={form.fullName}
+                    onChange={handleChange} placeholder="Adınız ve soyadınız" required />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Kullanıcı Adı</label>
+                  <IconInput icon={AtSign} name="username" value={form.username}
+                    onChange={handleChange} placeholder="kullaniciadi" required />
+                </div>
+
+                <div>
+                  <label className={labelCls}>E-posta</label>
+                  <IconInput icon={Mail} name="email" type="email" value={form.email}
+                    onChange={handleChange} placeholder="ad@ornek.com" required />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Şifre</label>
+                  <IconInput
+                    icon={Lock}
+                    name="password"
+                    type={showPass ? 'text' : 'password'}
+                    value={form.password}
+                    onChange={handleChange}
+                    placeholder="En az 6 karakter"
+                    required
+                    right={
+                      <button type="button" onClick={() => setShowPass((v) => !v)} tabIndex={-1}
+                        className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                        {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    }
+                  />
+                </div>
+
+                {/* Error */}
+                <AnimatePresence>
+                  {error && (
+                    <motion.div
+                      key="err"
+                      initial={{ opacity: 0, y: -6, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="flex items-start gap-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 text-[13px] text-rose-400"
+                    >
+                      <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                      {error}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Submit */}
+                <motion.button
+                  type="submit"
+                  disabled={loading}
+                  whileHover={!loading ? { scale: 1.01, boxShadow: '0 0 32px rgba(99,102,241,0.45)' } : {}}
+                  whileTap={!loading ? { scale: 0.98 } : {}}
+                  className="w-full py-3 rounded-xl text-white font-semibold text-sm mt-1 disabled:opacity-60 disabled:cursor-not-allowed"
+                  style={{
+                    background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+                    boxShadow:  loading ? 'none' : '0 6px 24px rgba(99,102,241,0.35)',
+                    transition: 'box-shadow 0.2s',
+                  }}
+                >
+                  <AnimatePresence mode="wait">
+                    {loading ? (
+                      <motion.span key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        Kayıt oluşturuluyor…
+                      </motion.span>
+                    ) : (
+                      <motion.span key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                        Kayıt Ol
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
+              </form>
+
+              <p className="text-center text-[13px] text-zinc-600 mt-8">
+                Zaten hesabınız var mı?{' '}
+                <Link to="/login" className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors">
+                  Giriş Yap
+                </Link>
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

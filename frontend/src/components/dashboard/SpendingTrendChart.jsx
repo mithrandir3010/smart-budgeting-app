@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
+  Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { fmt } from '../../utils/helpers';
 
@@ -10,7 +10,6 @@ const MONTH_LABELS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 
 
 function buildMonthlyData(transactions) {
   const map = {};
-
   for (const tx of transactions) {
     const d = new Date(tx.date);
     if (isNaN(d)) continue;
@@ -18,89 +17,124 @@ function buildMonthlyData(transactions) {
     if (!map[key]) map[key] = { key, year: d.getFullYear(), month: d.getMonth(), total: 0 };
     map[key].total += Math.abs(Number(tx.amount) || 0);
   }
-
   return Object.values(map)
     .sort((a, b) => a.key.localeCompare(b.key))
     .slice(-12)
-    .map((d) => ({
-      name:  `${MONTH_LABELS[d.month]} ${d.year}`,
-      total: Math.round(d.total),
-    }));
+    .map((d) => ({ name: `${MONTH_LABELS[d.month]} ${d.year}`, total: Math.round(d.total) }));
 }
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-[#111118] border border-white/[0.08] rounded-xl px-4 py-3 shadow-2xl text-sm">
-      <p className="text-[11px] font-semibold text-zinc-400 uppercase tracking-widest mb-1">{label}</p>
-      <p className="font-bold text-emerald-400 text-base">{fmt(payload[0].value)}</p>
+    <div
+      className="rounded-xl px-4 py-3 shadow-2xl text-sm"
+      style={{
+        background: 'rgba(10,10,18,0.92)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        backdropFilter: 'blur(12px)',
+      }}
+    >
+      <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">{label}</p>
+      <p className="font-bold text-emerald-400 text-base tabular-nums">{fmt(payload[0].value)}</p>
     </div>
+  );
+}
+
+function CustomDot({ cx, cy, value }) {
+  if (!value) return null;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={4} fill="#10b981" stroke="#050507" strokeWidth={2} />
+      <circle cx={cx} cy={cy} r={8} fill="#10b981" fillOpacity={0.15} />
+    </g>
   );
 }
 
 export default function SpendingTrendChart({ transactions }) {
   const data = useMemo(() => buildMonthlyData(transactions || []), [transactions]);
-
   if (data.length < 2) return null;
+
+  const maxVal  = Math.max(...data.map((d) => d.total));
+  const avgVal  = Math.round(data.reduce((s, d) => s + d.total, 0) / data.length);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.45, ease: [0.23, 1, 0.32, 1] }}
-      className="glass-card p-5"
+      className="relative overflow-hidden rounded-2xl p-5"
+      style={{
+        background: 'rgba(255,255,255,0.025)',
+        backdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255,255,255,0.07)',
+        boxShadow: '0 0 28px rgba(16,185,129,0.06)',
+      }}
     >
-      <div className="mb-5">
-        <p className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
-          Aylık Harcama Trendi
-        </p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-0.5">
-          Son {data.length} ay
-        </p>
+      {/* Ambient glow top-right */}
+      <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full blur-3xl pointer-events-none bg-indigo-500/10" />
+
+      <div className="relative mb-5 flex items-end justify-between">
+        <div>
+          <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">
+            Aylık Harcama Trendi
+          </p>
+          <p className="text-xs text-zinc-600 mt-0.5">Son {data.length} ay</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-zinc-600 uppercase tracking-wider">Ortalama</p>
+          <p className="text-sm font-bold text-indigo-400 tabular-nums">{fmt(avgVal)}</p>
+        </div>
       </div>
 
       <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
           <defs>
-            <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor="#10b981" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="#10b981" stopOpacity={0}    />
+            <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#10b981" stopOpacity={0.4} />
+              <stop offset="50%"  stopColor="#6366f1" stopOpacity={0.15} />
+              <stop offset="100%" stopColor="#6366f1" stopOpacity={0}   />
+            </linearGradient>
+            <linearGradient id="strokeGradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stopColor="#10b981" />
+              <stop offset="100%" stopColor="#6366f1" />
             </linearGradient>
           </defs>
 
-          <CartesianGrid
-            strokeDasharray="3 3"
-            stroke="rgba(255,255,255,0.04)"
-            vertical={false}
-          />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
           <XAxis
             dataKey="name"
-            tick={{ fontSize: 11, fill: '#71717a', fontWeight: 500 }}
+            tick={{ fontSize: 10, fill: '#52525b', fontWeight: 500 }}
             axisLine={false}
             tickLine={false}
             interval="preserveStartEnd"
           />
           <YAxis
-            tick={{ fontSize: 11, fill: '#71717a', fontWeight: 500 }}
+            tick={{ fontSize: 10, fill: '#52525b', fontWeight: 500 }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(v) =>
-              v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
-            }
-            width={48}
+            tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+            width={44}
           />
-          <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(16,185,129,0.3)', strokeWidth: 1 }} />
-
+          <Tooltip
+            content={<CustomTooltip />}
+            cursor={{ stroke: 'rgba(16,185,129,0.2)', strokeWidth: 1, strokeDasharray: '4 4' }}
+          />
+          <ReferenceLine
+            y={avgVal}
+            stroke="rgba(99,102,241,0.3)"
+            strokeDasharray="4 4"
+            strokeWidth={1}
+          />
           <Area
             type="monotone"
             dataKey="total"
-            stroke="#10b981"
-            strokeWidth={2}
-            fill="url(#areaGradient)"
+            stroke="url(#strokeGradient)"
+            strokeWidth={2.5}
+            fill="url(#trendGradient)"
             dot={false}
-            activeDot={{ r: 5, fill: '#10b981', stroke: '#050507', strokeWidth: 2 }}
+            activeDot={<CustomDot />}
             isAnimationActive
-            animationDuration={1200}
+            animationDuration={1400}
             animationEasing="ease-out"
           />
         </AreaChart>
