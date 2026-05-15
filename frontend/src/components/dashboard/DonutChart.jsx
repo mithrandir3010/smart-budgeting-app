@@ -84,7 +84,7 @@ export default function DonutChart({ categoryBreakdown }) {
       <div className="flex flex-col sm:flex-row gap-6 items-center">
         {/* Donut */}
         <div className="relative flex-shrink-0">
-          <ResponsiveContainer width={200} height={200}>
+          <ResponsiveContainer width="100%" height={200}>
             <PieChart>
               <Pie
                 data={data}

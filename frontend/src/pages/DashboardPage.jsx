@@ -19,16 +19,11 @@ import SubscriptionCard   from '../components/SubscriptionCard';
 import BudgetGuard        from '../components/BudgetGuard';
 import BudgetLimitModal   from '../components/BudgetLimitModal';
 import InstallmentCard    from '../components/InstallmentCard';
+import { fadeUp, GlassCard } from '../components/shared';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const TODAY = new Date().toLocaleDateString('tr-TR', {
   weekday: 'long', day: 'numeric', month: 'long',
-});
-
-const fadeUp = (delay = 0) => ({
-  initial:    { opacity: 0, y: 18 },
-  animate:    { opacity: 1, y: 0 },
-  transition: { duration: 0.5, delay, ease: [0.23, 1, 0.32, 1] },
 });
 
 function SectionLabel({ children }) {
@@ -36,23 +31,6 @@ function SectionLabel({ children }) {
     <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest mb-3 px-0.5">
       {children}
     </p>
-  );
-}
-
-// ── Glass card wrapper ────────────────────────────────────────────────────────
-function GlassCard({ children, className = '' }) {
-  return (
-    <div
-      className={`rounded-2xl p-5 ${className}`}
-      style={{
-        background:    'rgba(255,255,255,0.025)',
-        backdropFilter:'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        border:        '1px solid rgba(255,255,255,0.07)',
-      }}
-    >
-      {children}
-    </div>
   );
 }
 

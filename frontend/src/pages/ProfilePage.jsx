@@ -11,34 +11,10 @@ import {
   deleteAllStatements, getAnalyticsSummary, getTransactions, getStoredUser,
 } from '../api/client';
 import { generateReport } from '../utils/pdfReport';
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-const fadeUp = (delay = 0) => ({
-  initial:    { opacity: 0, y: 18 },
-  animate:    { opacity: 1, y: 0 },
-  transition: { duration: 0.5, delay, ease: [0.23, 1, 0.32, 1] },
-});
-
-function BrandMark({ size = 28 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 36 36" fill="none">
-      <rect width="36" height="36" rx="10" fill="#6366F1" />
-      <rect x="7"  y="22" width="5" height="8"  rx="1.5" fill="white" fillOpacity="0.55" />
-      <rect x="14" y="15" width="5" height="15" rx="1.5" fill="white" fillOpacity="0.8"  />
-      <rect x="21" y="8"  width="5" height="22" rx="1.5" fill="white" />
-      <circle cx="29" cy="7" r="3" fill="#A5F3FC" />
-    </svg>
-  );
-}
+import { BrandMark } from '../components/auth/VisionPanel';
+import { fadeUp, inputCls } from '../components/shared';
 
 // ── Input components ──────────────────────────────────────────────────────────
-const inputCls =
-  'w-full rounded-xl bg-white/[0.04] border border-white/[0.08] text-zinc-100 ' +
-  'placeholder-zinc-600 px-4 py-2.5 text-sm ' +
-  'focus:outline-none focus:border-indigo-500/50 ' +
-  'focus:ring-2 focus:ring-indigo-500/30 focus:shadow-[0_0_15px_rgba(99,102,241,0.18)] ' +
-  'transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed';
-
 const labelCls = 'block text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1.5';
 
 function Field({ label, children }) {

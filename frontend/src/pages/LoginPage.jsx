@@ -4,15 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { login, saveAuth } from '../api/client';
 import VisionPanel, { BrandMark } from '../components/auth/VisionPanel';
-
-const inputCls =
-  'w-full rounded-xl bg-white/[0.04] border border-white/[0.08] text-zinc-100 ' +
-  'placeholder-zinc-600 px-4 py-3 text-sm ' +
-  'focus:outline-none focus:border-indigo-500/50 ' +
-  'focus:ring-2 focus:ring-indigo-500/30 focus:shadow-[0_0_15px_rgba(99,102,241,0.18)] ' +
-  'transition-all duration-200 disabled:opacity-40';
-
-const labelCls = 'block text-[11px] font-semibold text-zinc-500 uppercase tracking-widest mb-1.5';
+import { inputCls, labelCls } from '../components/shared';
 
 export default function LoginPage() {
   const navigate = useNavigate();

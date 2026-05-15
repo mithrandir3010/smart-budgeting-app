@@ -7,6 +7,7 @@ import {
   ArrowLeft, FileText, Upload, BarChart2,
   CheckCircle, AlertTriangle, AlertCircle, Cpu,
 } from 'lucide-react';
+import { BrandMark } from '../components/auth/VisionPanel';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const LOADING_STEPS = [
@@ -28,19 +29,6 @@ function extractMessage(data) {
   if (typeof data === 'string') return data;
   if (typeof data === 'object' && data.message) return data.message;
   return JSON.stringify(data);
-}
-
-// ── BrandMark ─────────────────────────────────────────────────────────────────
-function BrandMark({ size = 26 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 36 36" fill="none">
-      <rect width="36" height="36" rx="10" fill="#6366F1" />
-      <rect x="7"  y="22" width="5" height="8"  rx="1.5" fill="white" fillOpacity="0.55" />
-      <rect x="14" y="15" width="5" height="15" rx="1.5" fill="white" fillOpacity="0.8"  />
-      <rect x="21" y="8"  width="5" height="22" rx="1.5" fill="white" />
-      <circle cx="29" cy="7" r="3" fill="#A5F3FC" />
-    </svg>
-  );
 }
 
 // ── AI Loading Overlay ────────────────────────────────────────────────────────
