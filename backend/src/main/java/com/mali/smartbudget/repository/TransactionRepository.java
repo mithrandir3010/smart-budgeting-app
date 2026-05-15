@@ -35,6 +35,6 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     @Query("SELECT MIN(t.date), MAX(t.date) FROM Transaction t WHERE t.user.id = :userId")
     List<Object[]> findDateRange(@Param("userId") Long userId);
 
-    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t WHERE t.user.id = :userId AND FUNCTION('YEAR', t.date) = :year AND FUNCTION('MONTH', t.date) = :month")
+    @Query(value = "SELECT COALESCE(SUM(t.amount), 0) FROM transactions t WHERE t.user_id = :userId AND EXTRACT(YEAR FROM t.date) = :year AND EXTRACT(MONTH FROM t.date) = :month", nativeQuery = true)
     BigDecimal findMonthlyTotal(@Param("userId") Long userId, @Param("year") int year, @Param("month") int month);
 }

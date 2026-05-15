@@ -2,10 +2,11 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard, Upload, UserCircle, LogOut,
-  Wallet, ShieldAlert, FileDown, Trash2,
+  Wallet, ShieldAlert, FileDown, Trash2, Sun, Moon,
 } from 'lucide-react';
 import { cn } from '../../utils/helpers';
 import { clearAuth, getStoredUser, logoutApi } from '../../api/client';
+import { useTheme } from '../../context/ThemeContext';
 
 const NAV = [
   { to: '/',        icon: LayoutDashboard, label: 'Dashboard' },
@@ -36,6 +37,7 @@ function NavItem({ to, icon: Icon, label, onClose }) {
 export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoading, onClose }) {
   const navigate = useNavigate();
   const user = getStoredUser();
+  const { theme, toggleTheme } = useTheme();
 
   const handleLogout = async () => {
     await logoutApi().catch(() => {});
@@ -108,6 +110,14 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
             <p className="text-[11px] text-zinc-500 truncate mt-0.5">{user.email}</p>
           </div>
         )}
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
+        >
+          {theme === 'dark' ? <Sun size={16} strokeWidth={1.8} /> : <Moon size={16} strokeWidth={1.8} />}
+          {theme === 'dark' ? 'Açık Tema' : 'Koyu Tema'}
+        </button>
+
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] active:scale-95 transition-all min-h-[44px]"
