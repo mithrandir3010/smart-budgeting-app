@@ -3,8 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Wallet, FileText, Zap, BarChart2, ShieldCheck,
-  CreditCard, Bell, Menu, X, ArrowRight, Github,
-  ChevronRight,
+  CreditCard, Bell, Menu, X, ArrowRight, ChevronRight,
 } from 'lucide-react';
 
 // ── Dashboard Mockup ──────────────────────────────────────────────────────────
@@ -414,15 +413,6 @@ export default function LandingPage() {
           </div>
           <div className="flex items-center gap-5">
             <Link to="/register" className="hover:text-zinc-300 transition-colors">Gizlilik Politikası</Link>
-            <a
-              href="https://github.com/mithrandir3010"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-zinc-300 transition-colors flex items-center gap-1.5"
-            >
-              <Github size={14} />
-              GitHub
-            </a>
           </div>
         </div>
       </footer>
