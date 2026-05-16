@@ -200,7 +200,7 @@ export default function LandingPage() {
       </header>
 
       {/* ── HERO ───────────────────────────────────────────────────────────── */}
-      <section className="pt-32 pb-20 px-5 max-w-6xl mx-auto">
+      <section className="pt-24 sm:pt-32 pb-20 px-5 max-w-6xl mx-auto">
         <div className="flex flex-col lg:flex-row items-center gap-16">
 
           {/* Sol — metin */}
@@ -254,7 +254,7 @@ export default function LandingPage() {
 
           {/* Sağ — mockup */}
           <motion.div
-            className="flex-1 w-full"
+            className="flex-1 w-full pb-8 lg:pb-0"
             initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: [0.23, 1, 0.32, 1] }}
