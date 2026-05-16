@@ -13,6 +13,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -61,6 +62,13 @@ public class User implements UserDetails {
     @Column(nullable = true, precision = 12, scale = 2)
     private BigDecimal monthlyBudget;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private int failedLoginAttempts = 0;
+
+    @Column(nullable = true)
+    private Instant lockedUntil;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -82,7 +90,9 @@ public class User implements UserDetails {
     public boolean isAccountNonExpired() { return true; }
 
     @Override
-    public boolean isAccountNonLocked() { return true; }
+    public boolean isAccountNonLocked() {
+        return lockedUntil == null || Instant.now().isAfter(lockedUntil);
+    }
 
     @Override
     public boolean isCredentialsNonExpired() { return true; }

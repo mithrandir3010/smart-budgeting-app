@@ -12,11 +12,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.time.Instant;
 
 @Slf4j
 @Service
@@ -37,6 +40,17 @@ public class AuthService implements UserDetailsService {
                         "Kullanıcı bulunamadı: " + username));
     }
 
+    private static final java.util.Set<String> DISPOSABLE_DOMAINS = java.util.Set.of(
+            "mailinator.com", "tempmail.com", "10minutemail.com", "guerrillamail.com",
+            "throwam.com", "yopmail.com", "trashmail.com", "fakeinbox.com",
+            "maildrop.cc", "dispostable.com", "sharklasers.com", "guerrillamailblock.com",
+            "grr.la", "guerrillamail.info", "guerrillamail.biz", "guerrillamail.de",
+            "guerrillamail.net", "guerrillamail.org", "spam4.me", "tempr.email",
+            "discard.email", "spamgourmet.com", "spamgourmet.net", "spamgourmet.org",
+            "spamcorner.com", "getairmail.com", "filzmail.com",
+            "tempinbox.com", "mailnesia.com", "mailnull.com"
+    );
+
     public void register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw new IllegalArgumentException(
@@ -45,6 +59,11 @@ public class AuthService implements UserDetailsService {
         if (userRepository.existsByEmail(request.email())) {
             throw new IllegalArgumentException(
                     "Bu e-posta zaten kayıtlı: " + request.email());
+        }
+        String emailDomain = request.email().substring(request.email().lastIndexOf('@') + 1).toLowerCase();
+        if (DISPOSABLE_DOMAINS.contains(emailDomain)) {
+            throw new IllegalArgumentException(
+                    "Geçici e-posta adresleri ile kayıt olunamamaktadır.");
         }
 
         User user = User.builder()
@@ -62,17 +81,35 @@ public class AuthService implements UserDetailsService {
         emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), token);
     }
 
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final int LOCK_DURATION_MINUTES = 15;
+
     public AuthTokenResult login(LoginRequest request) {
         User user = userRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BadCredentialsException("Kullanıcı adı veya şifre hatalı."));
 
+        if (!user.isAccountNonLocked()) {
+            throw new LockedException("Hesabınız geçici olarak kilitlendi. Lütfen 15 dakika sonra tekrar deneyin.");
+        }
+
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            int attempts = user.getFailedLoginAttempts() + 1;
+            user.setFailedLoginAttempts(attempts);
+            if (attempts >= MAX_FAILED_ATTEMPTS) {
+                user.setLockedUntil(Instant.now().plusSeconds(LOCK_DURATION_MINUTES * 60L));
+                log.warn("Hesap kilitlendi: {}", user.getUsername());
+            }
+            userRepository.save(user);
             throw new BadCredentialsException("Kullanıcı adı veya şifre hatalı.");
         }
 
         if (!user.isEmailVerified()) {
             throw new DisabledException("E-posta adresinizi doğrulamanız gerekiyor.");
         }
+
+        user.setFailedLoginAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
 
         String accessToken = jwtService.generateToken(user);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);

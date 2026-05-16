@@ -28,11 +28,14 @@ public class RateLimitingService {
     @Value("${app.rate-limit.refill-minutes:5}")
     private int refillMinutes;
 
-    @Value("${app.rate-limit.upload-capacity:5}")
+    @Value("${app.rate-limit.upload-capacity:3}")
     private int uploadCapacity;
 
     @Value("${app.rate-limit.upload-refill-hours:1}")
     private int uploadRefillHours;
+
+    @Value("${app.rate-limit.upload-monthly-capacity:10}")
+    private int uploadMonthlyCapacity;
 
     @Value("${app.rate-limit.api-capacity:60}")
     private int apiCapacity;
@@ -40,9 +43,10 @@ public class RateLimitingService {
     @Value("${app.rate-limit.api-refill-minutes:1}")
     private int apiRefillMinutes;
 
-    private final Map<String, Bucket> buckets       = new ConcurrentHashMap<>();
-    private final Map<String, Bucket> uploadBuckets = new ConcurrentHashMap<>();
-    private final Map<String, Bucket> apiBuckets    = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> buckets              = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> uploadBuckets        = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> uploadMonthlyBuckets = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> apiBuckets           = new ConcurrentHashMap<>();
 
     /** Auth endpoint'leri için IP bazlı limit — restart'ta kaybolmaz (DB blok). */
     @Transactional
@@ -58,16 +62,28 @@ public class RateLimitingService {
         return probe;
     }
 
-    /** Upload endpoint'i için kullanıcı bazlı limit — restart'ta kaybolmaz (DB blok). */
+    /** Upload endpoint'i için kullanıcı bazlı limit — saatlik ve aylık kontrol. */
     @Transactional
     public ConsumptionProbe tryConsumeUpload(String userId) {
-        String key = "upload:" + userId;
-        ConsumptionProbe dbBlock = checkDbBlock(key);
-        if (dbBlock != null) return dbBlock;
+        // Aylık limit kontrolü
+        String monthlyKey = "upload-monthly:" + userId;
+        ConsumptionProbe monthlyDbBlock = checkDbBlock(monthlyKey);
+        if (monthlyDbBlock != null) return monthlyDbBlock;
+
+        ConsumptionProbe monthlyProbe = resolveUploadMonthlyBucket(userId).tryConsumeAndReturnRemaining(1);
+        if (!monthlyProbe.isConsumed()) {
+            persistBlock(monthlyKey, Duration.ofDays(30));
+            return monthlyProbe;
+        }
+
+        // Saatlik limit kontrolü
+        String hourlyKey = "upload:" + userId;
+        ConsumptionProbe hourlyDbBlock = checkDbBlock(hourlyKey);
+        if (hourlyDbBlock != null) return hourlyDbBlock;
 
         ConsumptionProbe probe = resolveUploadBucket(userId).tryConsumeAndReturnRemaining(1);
         if (!probe.isConsumed()) {
-            persistBlock(key, Duration.ofHours(uploadRefillHours));
+            persistBlock(hourlyKey, Duration.ofHours(uploadRefillHours));
         }
         return probe;
     }
@@ -88,6 +104,7 @@ public class RateLimitingService {
     public void clearAll() {
         buckets.clear();
         uploadBuckets.clear();
+        uploadMonthlyBuckets.clear();
         apiBuckets.clear();
         blockRepository.deleteAll();
     }
@@ -127,6 +144,16 @@ public class RateLimitingService {
                         .addLimit(Bandwidth.builder()
                                 .capacity(uploadCapacity)
                                 .refillGreedy(uploadCapacity, Duration.ofHours(uploadRefillHours))
+                                .build())
+                        .build());
+    }
+
+    private Bucket resolveUploadMonthlyBucket(String userId) {
+        return uploadMonthlyBuckets.computeIfAbsent(userId, k ->
+                Bucket.builder()
+                        .addLimit(Bandwidth.builder()
+                                .capacity(uploadMonthlyCapacity)
+                                .refillGreedy(uploadMonthlyCapacity, Duration.ofDays(30))
                                 .build())
                         .build());
     }
