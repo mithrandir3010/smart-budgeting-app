@@ -1,9 +1,12 @@
 import { motion } from 'framer-motion';
-import { Wallet } from 'lucide-react';
+import { Wallet, Sun, Moon } from 'lucide-react';
 import Sidebar from './Sidebar';
 import BottomNav from './BottomNav';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function AppLayout({ children, sidebarProps = {} }) {
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-[#050507]">
       {/* Mesh gradient overlay — dark only */}
@@ -34,6 +37,15 @@ export default function AppLayout({ children, sidebarProps = {} }) {
           <span className="text-sm font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
             SmartBudget
           </span>
+          <button
+            onClick={toggleTheme}
+            className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg
+              text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100
+              hover:bg-zinc-100 dark:hover:bg-white/[0.07] transition-colors"
+            aria-label="Tema değiştir"
+          >
+            {theme === 'dark' ? <Sun size={16} strokeWidth={1.8} /> : <Moon size={16} strokeWidth={1.8} />}
+          </button>
         </div>
       </header>
 
