@@ -182,7 +182,7 @@ export default function LandingPage() {
               <Link
                 to="/login"
                 onClick={() => setMenuOpen(false)}
-                className="py-2.5 text-sm font-medium text-zinc-300 hover:text-white transition-colors"
+                className="py-3 rounded-xl text-sm font-semibold text-zinc-100 text-center border border-white/15 hover:border-white/30 transition-all"
               >
                 Giriş Yap
               </Link>
