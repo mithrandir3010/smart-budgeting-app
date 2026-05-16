@@ -152,7 +152,7 @@ export default function UploadPage() {
       setCountdown(3);
       timerRef.current = setInterval(() => {
         setCountdown((prev) => {
-          if (prev <= 1) { clearInterval(timerRef.current); navigate('/'); return 0; }
+          if (prev <= 1) { clearInterval(timerRef.current); navigate('/dashboard'); return 0; }
           return prev - 1;
         });
       }, 1000);
@@ -244,7 +244,7 @@ export default function UploadPage() {
           className="flex items-center justify-between mb-8"
         >
           <Link
-            to="/"
+            to="/dashboard"
             className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
           >
             <ArrowLeft size={15} strokeWidth={2} />
@@ -397,7 +397,7 @@ export default function UploadPage() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => { clearInterval(timerRef.current); navigate('/'); }}
+                            onClick={() => { clearInterval(timerRef.current); navigate('/dashboard'); }}
                             className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex-shrink-0 transition-colors"
                           >
                             <BarChart2 size={12} />

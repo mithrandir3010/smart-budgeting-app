@@ -3,9 +3,9 @@ import { LayoutDashboard, Upload, UserCircle } from 'lucide-react';
 import { cn } from '../../utils/helpers';
 
 const TABS = [
-  { to: '/',        icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/upload',  icon: Upload,          label: 'Yükle' },
-  { to: '/profile', icon: UserCircle,      label: 'Profil' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/upload',    icon: Upload,          label: 'Yükle' },
+  { to: '/profile',   icon: UserCircle,      label: 'Profil' },
 ];
 
 export default function BottomNav() {
@@ -20,7 +20,7 @@ export default function BottomNav() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            end={to === '/dashboard'}
             className={({ isActive }) => cn(
               'relative flex flex-col items-center justify-center gap-1 flex-1 py-2 mx-1 rounded-2xl transition-all duration-200 active:scale-95',
               isActive

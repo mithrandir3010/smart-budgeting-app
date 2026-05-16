@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { isAuthenticated } from './api/client';
 import { ThemeProvider } from './context/ThemeContext';
+import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
 import UploadPage from './pages/UploadPage';
 import LoginPage from './pages/LoginPage';
@@ -16,7 +17,7 @@ function PrivateRoute({ element }) {
 }
 
 function PublicRoute({ element }) {
-  return isAuthenticated() ? <Navigate to="/" replace /> : element;
+  return isAuthenticated() ? <Navigate to="/dashboard" replace /> : element;
 }
 
 function App() {
@@ -33,15 +34,16 @@ function App() {
       />
       <BrowserRouter>
         <Routes>
+          <Route path="/"              element={isAuthenticated() ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
           <Route path="/login"         element={<PublicRoute element={<LoginPage />} />} />
           <Route path="/register"      element={<PublicRoute element={<RegisterPage />} />} />
-          <Route path="/verify-email"     element={<VerifyEmailPage />} />
-          <Route path="/forgot-password"  element={<PublicRoute element={<ForgotPasswordPage />} />} />
-          <Route path="/reset-password"   element={<ResetPasswordPage />} />
-          <Route path="/"         element={<PrivateRoute element={<DashboardPage />} />} />
-          <Route path="/upload"   element={<PrivateRoute element={<UploadPage />} />} />
-          <Route path="/profile"  element={<PrivateRoute element={<ProfilePage />} />} />
-          <Route path="*"         element={<Navigate to="/" replace />} />
+          <Route path="/verify-email"    element={<VerifyEmailPage />} />
+          <Route path="/forgot-password" element={<PublicRoute element={<ForgotPasswordPage />} />} />
+          <Route path="/reset-password"  element={<ResetPasswordPage />} />
+          <Route path="/dashboard" element={<PrivateRoute element={<DashboardPage />} />} />
+          <Route path="/upload"    element={<PrivateRoute element={<UploadPage />} />} />
+          <Route path="/profile"   element={<PrivateRoute element={<ProfilePage />} />} />
+          <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

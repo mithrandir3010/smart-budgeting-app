@@ -9,16 +9,16 @@ import { clearAuth, getStoredUser, logoutApi } from '../../api/client';
 import { useTheme } from '../../context/ThemeContext';
 
 const NAV = [
-  { to: '/',        icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/upload',  icon: Upload,          label: 'Ekstre Yükle' },
-  { to: '/profile', icon: UserCircle,      label: 'Profil' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/upload',    icon: Upload,          label: 'Ekstre Yükle' },
+  { to: '/profile',   icon: UserCircle,      label: 'Profil' },
 ];
 
 function NavItem({ to, icon: Icon, label, onClose }) {
   return (
     <NavLink
       to={to}
-      end={to === '/'}
+      end={to === '/dashboard'}
       onClick={onClose}
       className={({ isActive }) => cn(
         'group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',

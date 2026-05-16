@@ -23,7 +23,7 @@ export default function LoginPage() {
       const res = await login(form);
       const { username, email, fullName } = res.data;
       saveAuth({ username, email, fullName });
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Giriş yapılamadı.');
     } finally {
