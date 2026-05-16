@@ -58,6 +58,7 @@ public class StatementService {
     private final TransactionService    transactionService;
     private final BudgetLimitRepository budgetLimitRepository;
     private final PdfArchiveRepository  pdfArchiveRepository;
+    private final AuditService          auditService;
 
     /**
      * PDF ekstreyi işler: mükerrerlik kontrolü → ayıklama → dönem kontrolü → kayıt.
@@ -176,6 +177,7 @@ public class StatementService {
 
         // ── Başarı mesajı ─────────────────────────────────────────────────────
         uploadSw.stop();
+        auditService.statementUploaded(userId, fileName);
         log.info("[Upload] Tamamlandı. userId={}, dosya='{}', {} işlem | toplam süre={}ms",
                 userId, fileName, saved.size(), uploadSw.getTotalTimeMillis());
 
@@ -199,6 +201,7 @@ public class StatementService {
         transactionService.deleteAllByUserId(userId);
         statementRepository.deleteAllByUserId(userId);
         budgetLimitRepository.deleteAllByUserId(userId);
+        auditService.statementDeleted(userId);
         log.info("Tüm veriler silindi (transaction + statement + budget limits). userId={}", userId);
     }
 }

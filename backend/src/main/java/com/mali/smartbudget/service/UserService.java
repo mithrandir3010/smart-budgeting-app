@@ -18,6 +18,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditService auditService;
 
     public UserProfileDto getCurrentUserProfile(User user) {
         return toDto(user);
@@ -35,7 +36,7 @@ public class UserService {
         user.setFullName(request.fullName().trim());
         user.setEmail(newEmail);
         User saved = userRepository.save(user);
-        log.info("Profil güncellendi. userId={}", saved.getId());
+        auditService.profileUpdated(saved.getId(), saved.getUsername());
         return toDto(saved);
     }
 
@@ -55,7 +56,7 @@ public class UserService {
 
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
-        log.info("Şifre değiştirildi. userId={}", user.getId());
+        auditService.passwordChanged(user.getId(), user.getUsername());
     }
 
     @Transactional

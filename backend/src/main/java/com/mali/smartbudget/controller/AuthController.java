@@ -62,9 +62,11 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request,
+                                               HttpServletRequest httpRequest) {
         log.info("Giriş isteği: username={}", request.username());
-        AuthTokenResult result = authService.login(request);
+        String ip = resolveClientIp(httpRequest);
+        AuthTokenResult result = authService.login(request, ip);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE,
                         buildAccessCookie(result.accessToken()).toString(),
@@ -134,6 +136,11 @@ public class AuthController {
                 .path("/")
                 .maxAge(0)
                 .build();
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        return (xff != null && !xff.isBlank()) ? xff.split(",")[0].trim() : request.getRemoteAddr();
     }
 
     private Optional<String> extractCookieValue(HttpServletRequest request, String name) {

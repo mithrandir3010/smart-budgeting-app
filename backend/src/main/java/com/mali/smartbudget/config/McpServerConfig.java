@@ -8,6 +8,7 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.transport.WebMvcSseServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.function.RouterFunction;
@@ -52,6 +53,7 @@ import java.util.List;
  */
 @Slf4j
 @Configuration
+@ConditionalOnProperty(name = "app.mcp.enabled", havingValue = "true")
 public class McpServerConfig {
 
     /**

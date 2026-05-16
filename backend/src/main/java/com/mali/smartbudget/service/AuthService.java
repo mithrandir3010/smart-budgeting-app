@@ -32,6 +32,7 @@ public class AuthService implements UserDetailsService {
     private final RefreshTokenService refreshTokenService;
     private final EmailVerificationService emailVerificationService;
     private final EmailService emailService;
+    private final AuditService auditService;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -62,6 +63,7 @@ public class AuthService implements UserDetailsService {
         }
         String emailDomain = request.email().substring(request.email().lastIndexOf('@') + 1).toLowerCase();
         if (DISPOSABLE_DOMAINS.contains(emailDomain)) {
+            auditService.disposableEmailBlocked(request.email(), "N/A");
             throw new IllegalArgumentException(
                     "Geçici e-posta adresleri ile kayıt olunamamaktadır.");
         }
@@ -84,11 +86,12 @@ public class AuthService implements UserDetailsService {
     private static final int MAX_FAILED_ATTEMPTS = 5;
     private static final int LOCK_DURATION_MINUTES = 15;
 
-    public AuthTokenResult login(LoginRequest request) {
+    public AuthTokenResult login(LoginRequest request, String ip) {
         User user = userRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BadCredentialsException("Kullanıcı adı veya şifre hatalı."));
 
         if (!user.isAccountNonLocked()) {
+            auditService.accountLocked(user.getUsername(), ip);
             throw new LockedException("Hesabınız geçici olarak kilitlendi. Lütfen 15 dakika sonra tekrar deneyin.");
         }
 
@@ -97,7 +100,9 @@ public class AuthService implements UserDetailsService {
             user.setFailedLoginAttempts(attempts);
             if (attempts >= MAX_FAILED_ATTEMPTS) {
                 user.setLockedUntil(Instant.now().plusSeconds(LOCK_DURATION_MINUTES * 60L));
-                log.warn("Hesap kilitlendi: {}", user.getUsername());
+                auditService.accountLocked(user.getUsername(), ip);
+            } else {
+                auditService.loginFailure(user.getUsername(), ip, attempts);
             }
             userRepository.save(user);
             throw new BadCredentialsException("Kullanıcı adı veya şifre hatalı.");
@@ -113,7 +118,7 @@ public class AuthService implements UserDetailsService {
 
         String accessToken = jwtService.generateToken(user);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
-        log.info("Kullanıcı giriş yaptı: {}", user.getUsername());
+        auditService.loginSuccess(user.getUsername(), ip);
         return new AuthTokenResult(accessToken, refreshToken.getToken(),
                 new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
     }
