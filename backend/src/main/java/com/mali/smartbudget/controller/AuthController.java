@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 import com.mali.smartbudget.service.EmailVerificationService;
+import com.mali.smartbudget.service.PasswordResetService;
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -36,6 +37,7 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final JwtService jwtService;
     private final EmailVerificationService emailVerificationService;
+    private final PasswordResetService passwordResetService;
 
     @Value("${jwt.expiration}")
     private long accessExpiration;
@@ -92,6 +94,24 @@ public class AuthController {
                         rotated.getUser().getUsername(),
                         rotated.getUser().getEmail(),
                         rotated.getUser().getFullName()));
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(@RequestBody Map<String, String> body) {
+        String email = body.getOrDefault("email", "").trim();
+        passwordResetService.sendResetEmail(email);
+        return ResponseEntity.ok(Map.of("message",
+                "Eğer bu e-posta kayıtlıysa, şifre sıfırlama linki gönderildi."));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(@RequestBody Map<String, String> body) {
+        passwordResetService.resetPassword(
+                body.getOrDefault("token", ""),
+                body.getOrDefault("newPassword", ""),
+                body.getOrDefault("confirmPassword", "")
+        );
+        return ResponseEntity.ok(Map.of("message", "Şifreniz başarıyla sıfırlandı."));
     }
 
     @PostMapping("/logout")

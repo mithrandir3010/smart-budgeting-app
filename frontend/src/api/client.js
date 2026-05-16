@@ -90,6 +90,12 @@ export const logoutApi = () =>
 export const verifyEmail = (token) =>
   client.get('/api/v1/auth/verify-email', { params: { token } });
 
+export const forgotPassword = (email) =>
+  client.post('/api/v1/auth/forgot-password', { email });
+
+export const resetPassword = (token, newPassword, confirmPassword) =>
+  client.post('/api/v1/auth/reset-password', { token, newPassword, confirmPassword });
+
 // ── Analytics ─────────────────────────────────────────────────────────────────
 export const getAnalyticsSummary = () =>
   client.get('/api/v1/analytics/summary');

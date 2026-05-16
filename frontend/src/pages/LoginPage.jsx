@@ -159,15 +159,23 @@ export default function LoginPage() {
             </motion.button>
           </form>
 
-          <p className="text-center text-[13px] text-zinc-600 mt-8">
-            Hesabınız yok mu?{' '}
+          <div className="flex flex-col items-center gap-3 mt-8">
+            <p className="text-center text-[13px] text-zinc-600">
+              Hesabınız yok mu?{' '}
+              <Link
+                to="/register"
+                className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors"
+              >
+                Ücretsiz Kayıt Ol
+              </Link>
+            </p>
             <Link
-              to="/register"
-              className="text-indigo-400 font-semibold hover:text-indigo-300 transition-colors"
+              to="/forgot-password"
+              className="text-[13px] text-zinc-500 hover:text-indigo-400 transition-colors"
             >
-              Ücretsiz Kayıt Ol
+              Şifremi unuttum
             </Link>
-          </p>
+          </div>
         </motion.div>
       </div>
     </div>

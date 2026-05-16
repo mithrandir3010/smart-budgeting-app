@@ -8,6 +8,8 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import ProfilePage from './pages/ProfilePage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 function PrivateRoute({ element }) {
   return isAuthenticated() ? element : <Navigate to="/login" replace />;
@@ -33,7 +35,9 @@ function App() {
         <Routes>
           <Route path="/login"         element={<PublicRoute element={<LoginPage />} />} />
           <Route path="/register"      element={<PublicRoute element={<RegisterPage />} />} />
-          <Route path="/verify-email"  element={<VerifyEmailPage />} />
+          <Route path="/verify-email"     element={<VerifyEmailPage />} />
+          <Route path="/forgot-password"  element={<PublicRoute element={<ForgotPasswordPage />} />} />
+          <Route path="/reset-password"   element={<ResetPasswordPage />} />
           <Route path="/"         element={<PrivateRoute element={<DashboardPage />} />} />
           <Route path="/upload"   element={<PrivateRoute element={<UploadPage />} />} />
           <Route path="/profile"  element={<PrivateRoute element={<ProfilePage />} />} />
