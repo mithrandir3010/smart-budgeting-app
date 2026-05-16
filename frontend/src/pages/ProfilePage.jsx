@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, User, Lock, Save, Eye, EyeOff,
-  FileDown, Trash2, ShieldCheck, Database,
+  FileDown, Trash2, ShieldCheck, Database, LogOut,
 } from 'lucide-react';
 import {
   getUserProfile, updateProfile, changePassword,
   deleteAllStatements, getAnalyticsSummary, getTransactions, getStoredUser,
+  logoutApi, clearAuth,
 } from '../api/client';
 import { generateReport } from '../utils/pdfReport';
 import { BrandMark } from '../components/auth/VisionPanel';
@@ -225,8 +226,10 @@ function DataPanel({ onDownload, onDelete, pdfLoading, deleteLoading }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function ProfilePage() {
+  const navigate = useNavigate();
   const [pageLoading,  setPageLoading]  = useState(true);
   const [activeTab,    setActiveTab]    = useState('personal');
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   const [profile,      setProfile]      = useState({ fullName: '', email: '' });
   const [profileSaving, setProfileSaving] = useState(false);
@@ -308,6 +311,13 @@ export default function ProfilePage() {
     }
   };
 
+  const handleLogout = async () => {
+    setLogoutLoading(true);
+    await logoutApi().catch(() => {});
+    clearAuth();
+    navigate('/login');
+  };
+
   const initials = profile.fullName
     ? profile.fullName.split(' ').filter(Boolean).map((n) => n[0]).join('').toUpperCase().slice(0, 2)
     : '?';
@@ -386,6 +396,24 @@ export default function ProfilePage() {
                   </div>
                 ))}
               </div>
+
+              {/* Logout button — only visible on mobile (sidebar handles desktop) */}
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={handleLogout}
+                disabled={logoutLoading}
+                className="lg:hidden mt-5 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+                  bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20
+                  text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/15
+                  transition-all disabled:opacity-50"
+              >
+                {logoutLoading
+                  ? <div className="w-3.5 h-3.5 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin" />
+                  : <LogOut size={14} strokeWidth={2} />
+                }
+                {logoutLoading ? 'Çıkış yapılıyor...' : 'Çıkış Yap'}
+              </motion.button>
 
               {/* Quick-nav to tabs on mobile */}
               <div className="mt-5 grid grid-cols-3 gap-1.5 lg:hidden">
