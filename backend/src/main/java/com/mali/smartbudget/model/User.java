@@ -69,6 +69,17 @@ public class User implements UserDetails {
     @Column(nullable = true)
     private Instant lockedUntil;
 
+    @Column(name = "last_login_at")
+    private LocalDateTime lastLoginAt;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private int loginCount = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean isActive = true;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -2,5 +2,6 @@ package com.mali.smartbudget.model;
 
 public enum StatementStatus {
     PENDING,
-    PROCESSED
+    PROCESSED,
+    FAILED
 }
