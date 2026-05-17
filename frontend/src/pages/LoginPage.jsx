@@ -21,8 +21,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await login(form);
-      const { username, email, fullName } = res.data;
-      saveAuth({ username, email, fullName });
+      const { username, email, fullName, role } = res.data;
+      saveAuth({ username, email, fullName, role });
       navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Giriş yapılamadı.');
