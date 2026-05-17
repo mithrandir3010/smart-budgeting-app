@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { isAuthenticated } from './api/client';
+import { isAuthenticated, getStoredUser } from './api/client';
 import { ThemeProvider } from './context/ThemeContext';
 import LandingPage from './pages/LandingPage';
 import DashboardPage from './pages/DashboardPage';
@@ -11,6 +11,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage';
 import ProfilePage from './pages/ProfilePage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import AdminPage from './pages/AdminPage';
 
 function PrivateRoute({ element }) {
   return isAuthenticated() ? element : <Navigate to="/login" replace />;
@@ -18,6 +19,16 @@ function PrivateRoute({ element }) {
 
 function PublicRoute({ element }) {
   return isAuthenticated() ? <Navigate to="/dashboard" replace /> : element;
+}
+
+// Stealth mode: non-admin hits "/" → landing (or /dashboard if authenticated).
+// Panel varlığını 403 ekranıyla ifşa etmez.
+function AdminRoute({ element }) {
+  const user = getStoredUser();
+  if (!isAuthenticated() || user?.role !== 'ROLE_ADMIN') {
+    return <Navigate to="/" replace />;
+  }
+  return element;
 }
 
 function App() {
@@ -43,6 +54,7 @@ function App() {
           <Route path="/dashboard" element={<PrivateRoute element={<DashboardPage />} />} />
           <Route path="/upload"    element={<PrivateRoute element={<UploadPage />} />} />
           <Route path="/profile"   element={<PrivateRoute element={<ProfilePage />} />} />
+          <Route path="/admin"     element={<AdminRoute   element={<AdminPage />} />} />
           <Route path="*"          element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

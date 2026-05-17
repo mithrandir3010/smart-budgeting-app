@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard, Upload, UserCircle, LogOut,
-  Wallet, ShieldAlert, FileDown, Trash2, Sun, Moon,
+  Wallet, ShieldAlert, FileDown, Trash2, Sun, Moon, Shield,
 } from 'lucide-react';
 import { cn } from '../../utils/helpers';
 import { clearAuth, getStoredUser, logoutApi } from '../../api/client';
@@ -67,6 +67,12 @@ export function SidebarInner({ onLimitClick, onDeleteAll, onDownloadPdf, pdfLoad
         {NAV.map((item) => (
           <NavItem key={item.to} {...item} onClose={onClose} />
         ))}
+        {user?.role === 'ROLE_ADMIN' && (
+          <>
+            <div className="mx-1 my-2 h-px bg-zinc-200 dark:bg-white/[0.06]" />
+            <NavItem to="/admin" icon={Shield} label="Admin Paneli" onClose={onClose} />
+          </>
+        )}
       </nav>
 
       {/* Quick actions */}

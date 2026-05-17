@@ -161,4 +161,25 @@ export const getStoredUser = () => {
 
 export const isAuthenticated = () => !!localStorage.getItem('user_info');
 
+// ── Admin ─────────────────────────────────────────────────────────────────────
+export const getAdminStats = () =>
+  client.get('/api/v1/admin/stats');
+
+export const getAdminUsers = (page = 0, size = 20, search = '') =>
+  client.get('/api/v1/admin/users', {
+    params: { page, size, ...(search ? { search } : {}) },
+  });
+
+export const getAdminUserStatements = (id) =>
+  client.get(`/api/v1/admin/users/${id}/statements`);
+
+export const toggleAdminUserStatus = (id, active) =>
+  client.put(`/api/v1/admin/users/${id}/status`, { active });
+
+export const getAdminAudit = (page = 0, size = 50) =>
+  client.get('/api/v1/admin/audit', { params: { page, size } });
+
+export const getAdminGrowth = () =>
+  client.get('/api/v1/admin/growth');
+
 export default client;
