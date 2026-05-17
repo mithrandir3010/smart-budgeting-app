@@ -178,9 +178,11 @@ export default function VisionPanel({ variant = 'login' }) {
       <div
         className="hidden lg:flex lg:w-[52%] relative overflow-hidden flex-col justify-between p-14"
         style={{
-          background: 'linear-gradient(160deg, #06091A 0%, #0E1530 60%, #0A1020 100%)',
-          backgroundImage: 'radial-gradient(rgba(255,255,255,0.028) 1px, transparent 1px)',
-          backgroundSize: '28px 28px',
+          background: `
+            radial-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+            linear-gradient(160deg, #06091A 0%, #0E1530 60%, #0A1020 100%)
+          `,
+          backgroundSize: '28px 28px, cover',
         }}
       >
         {/* Blobs */}
