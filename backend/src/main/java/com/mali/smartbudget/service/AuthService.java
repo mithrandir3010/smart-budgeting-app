@@ -20,6 +20,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Service
@@ -95,6 +96,10 @@ public class AuthService implements UserDetailsService {
             throw new LockedException("Hesabınız geçici olarak kilitlendi. Lütfen 15 dakika sonra tekrar deneyin.");
         }
 
+        if (!user.isActive()) {
+            throw new DisabledException("Hesabınız yönetici tarafından devre dışı bırakıldı.");
+        }
+
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             int attempts = user.getFailedLoginAttempts() + 1;
             user.setFailedLoginAttempts(attempts);
@@ -114,12 +119,14 @@ public class AuthService implements UserDetailsService {
 
         user.setFailedLoginAttempts(0);
         user.setLockedUntil(null);
+        user.setLastLoginAt(LocalDateTime.now());
+        user.setLoginCount(user.getLoginCount() + 1);
         userRepository.save(user);
 
         String accessToken = jwtService.generateToken(user);
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
         auditService.loginSuccess(user.getUsername(), ip);
         return new AuthTokenResult(accessToken, refreshToken.getToken(),
-                new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName()));
+                new AuthResponse(user.getUsername(), user.getEmail(), user.getFullName(), user.getRole()));
     }
 }

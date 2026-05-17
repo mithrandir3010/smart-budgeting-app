@@ -16,6 +16,10 @@ public interface StatementRepository extends JpaRepository<Statement, Long> {
 
     List<Statement> findByUserId(Long userId);
 
+    long countByUserId(Long userId);
+
+    long countByStatus(StatementStatus status);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM Statement s WHERE s.user.id = :userId")
     void deleteAllByUserId(@Param("userId") Long userId);

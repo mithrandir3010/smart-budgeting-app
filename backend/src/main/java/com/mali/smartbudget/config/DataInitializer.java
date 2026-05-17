@@ -4,6 +4,7 @@ import com.mali.smartbudget.model.User;
 import com.mali.smartbudget.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -13,32 +14,27 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
 
-    private static final String DEFAULT_USERNAME = "mali";
-    private static final String DEFAULT_EMAIL    = "test@mali.com";
-    private static final String DEFAULT_PASSWORD = "test1234";
+    private static final String ADMIN_USERNAME = "admin";
+    private static final String ADMIN_EMAIL    = "admin@smartbudgetr.com";
+
+    @Value("${app.admin.password:SmartBudgetAdmin2024}")
+    private String adminPassword;
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
     public void run(String... args) {
-        if (userRepository.existsByUsername(DEFAULT_USERNAME)) {
-            log.info("DataInitializer: '{}' zaten mevcut, atlanıyor.", DEFAULT_USERNAME);
-            return;
+        if (!userRepository.existsByUsername(ADMIN_USERNAME)) {
+            userRepository.save(User.builder()
+                    .username(ADMIN_USERNAME)
+                    .email(ADMIN_EMAIL)
+                    .fullName("Admin")
+                    .password(passwordEncoder.encode(adminPassword))
+                    .role("ROLE_ADMIN")
+                    .emailVerified(true)
+                    .build());
+            log.info("DataInitializer: Admin kullanıcısı oluşturuldu → username='{}'", ADMIN_USERNAME);
         }
-
-        User testUser = User.builder()
-                .username(DEFAULT_USERNAME)
-                .email(DEFAULT_EMAIL)
-                .fullName("Mali Test Kullanıcısı")
-                .password(passwordEncoder.encode(DEFAULT_PASSWORD))
-                .role("ROLE_USER")
-                .emailVerified(true)
-                .build();
-
-        userRepository.save(testUser);
-        log.info("DataInitializer: Varsayılan kullanıcı oluşturuldu → username='{}', email='{}'",
-                DEFAULT_USERNAME, DEFAULT_EMAIL);
-        log.info("DataInitializer: Giriş için → username: {}, password: {}", DEFAULT_USERNAME, DEFAULT_PASSWORD);
     }
 }

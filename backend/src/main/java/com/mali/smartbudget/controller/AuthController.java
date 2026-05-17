@@ -93,7 +93,8 @@ public class AuthController {
                 .body(new AuthResponse(
                         rotated.getUser().getUsername(),
                         rotated.getUser().getEmail(),
-                        rotated.getUser().getFullName()));
+                        rotated.getUser().getFullName(),
+                        rotated.getUser().getRole()));
     }
 
     @PostMapping("/forgot-password")
