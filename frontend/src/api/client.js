@@ -182,4 +182,28 @@ export const getAdminAudit = (page = 0, size = 50) =>
 export const getAdminGrowth = () =>
   client.get('/api/v1/admin/growth');
 
+export const getAdminBankStats = () =>
+  client.get('/api/v1/admin/bank-stats');
+
+export const getAdminFunnel = () =>
+  client.get('/api/v1/admin/funnel');
+
+export const getAdminSilentFailures = () =>
+  client.get('/api/v1/admin/silent-failures');
+
+export const getAdminFailedStatements = () =>
+  client.get('/api/v1/admin/failed-statements');
+
+export const getAdminSettings = () =>
+  client.get('/api/v1/admin/settings');
+
+export const updateAdminSettings = (settings) =>
+  client.put('/api/v1/admin/settings', settings);
+
+export const bulkToggleUserStatus = (userIds, active) =>
+  client.post('/api/v1/admin/users/bulk-status', { userIds, active });
+
+export const getPublicSettings = () =>
+  client.get('/api/v1/settings/public');
+
 export default client;

@@ -4,8 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, AlertTriangle } from 'lucide-react';
 import {
   getAnalyticsSummary, getTransactions, getBudgetAlerts,
-  updateMonthlyBudget, deleteAllStatements, getStoredUser,
+  updateMonthlyBudget, deleteAllStatements, getStoredUser, getPublicSettings,
 } from '../api/client';
+import { Megaphone, X as XIcon } from 'lucide-react';
 import { generateReport } from '../utils/pdfReport';
 
 import AppLayout          from '../components/layout/AppLayout';
@@ -107,6 +108,8 @@ export default function DashboardPage() {
   const [error,          setError]          = useState(null);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [pdfLoading,     setPdfLoading]     = useState(false);
+  const [announcement,   setAnnouncement]   = useState('');
+  const [annDismissed,   setAnnDismissed]   = useState(false);
 
   const handleDownloadPdf = async () => {
     if (!summary) return;
@@ -148,6 +151,7 @@ export default function DashboardPage() {
       .catch(() => setError('Veriler yüklenirken bir hata oluştu.'))
       .finally(() => setLoading(false));
     fetchAlerts();
+    getPublicSettings().then((r) => setAnnouncement(r.data.announcement || '')).catch(() => {});
   }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <LoadingView />;
@@ -174,6 +178,23 @@ export default function DashboardPage() {
       onDownloadPdf: handleDownloadPdf,
       pdfLoading,
     }}>
+
+      {/* Announcement banner */}
+      <AnimatePresence>
+        {announcement && !annDismissed && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            className="mb-4 flex items-start gap-3 px-4 py-3 rounded-xl
+              bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20"
+          >
+            <Megaphone size={15} className="text-indigo-500 shrink-0 mt-0.5" />
+            <p className="flex-1 text-sm text-indigo-700 dark:text-indigo-300">{announcement}</p>
+            <button onClick={() => setAnnDismissed(true)} className="text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200 transition-colors">
+              <XIcon size={14} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showLimitModal && (

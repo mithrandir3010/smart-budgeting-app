@@ -292,6 +292,7 @@ public class ExtractionService {
     private final CategorizationService categorizationService;
     private final MerchantCacheService merchantCacheService;
     private final LlmCategorizationService llmCategorizationService;
+    private final SystemSettingService systemSettingService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Başlangıç doğrulaması
@@ -383,6 +384,11 @@ public class ExtractionService {
         // ── [2/5] Transaction Router — HIGH confidence → LOCAL (0 token), LOW → LLM ──
         BankType bankType = detectBankType(rawText);
         log.info("[router] Tespit edilen banka: {}", bankType);
+
+        if (bankType != BankType.UNKNOWN && systemSettingService.getDisabledBanks().contains(bankType.name())) {
+            throw new IllegalArgumentException(
+                    bankType.name() + " banka parseri şu an bakımda. Lütfen kısa süre sonra tekrar deneyin.");
+        }
 
         String[]             allLines  = cleanText.split("\n", -1);
         List<TransactionDto> localDtos = new ArrayList<>();

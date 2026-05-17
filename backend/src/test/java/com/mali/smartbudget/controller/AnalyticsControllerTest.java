@@ -64,6 +64,7 @@ class AnalyticsControllerTest {
     @MockBean  private JwtAuthenticationFilter jwtAuthenticationFilter;
     @MockBean  private UserDetailsService userDetailsService;
     @MockBean  private com.mali.smartbudget.service.RateLimitingService rateLimitingService;
+    @MockBean  private com.mali.smartbudget.service.SystemSettingService systemSettingService;
 
     private User testUser;
     private UsernamePasswordAuthenticationToken auth;

@@ -52,6 +52,35 @@ public interface StatementRepository extends JpaRepository<Statement, Long> {
      * @param periodEnd   Yeni ekstrenin en yeni işlem tarihi
      * @return Çakışan Statement kaydı sayısı (0 → çakışma yok, >0 → çakışma var)
      */
+    @Query(value = """
+            SELECT COALESCE(bank_name, 'UNKNOWN') AS bank, COUNT(*) AS cnt
+            FROM statements
+            GROUP BY bank
+            ORDER BY cnt DESC
+            """, nativeQuery = true)
+    java.util.List<Object[]> findBankDistribution();
+
+    @Query(value = """
+            SELECT s.id, s.file_name, s.user_id, u.username, s.upload_date, s.bank_name
+            FROM statements s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.status = 'PROCESSED'
+              AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.statement_id = s.id)
+            ORDER BY s.upload_date DESC
+            LIMIT 100
+            """, nativeQuery = true)
+    java.util.List<Object[]> findSilentFailures();
+
+    @Query(value = """
+            SELECT s.id, s.file_name, s.user_id, u.username, s.upload_date, s.bank_name
+            FROM statements s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.status = 'FAILED'
+            ORDER BY s.upload_date DESC
+            LIMIT 100
+            """, nativeQuery = true)
+    java.util.List<Object[]> findFailedStatements();
+
     @Query("""
             SELECT COUNT(s) FROM Statement s
             WHERE s.user.id      = :userId

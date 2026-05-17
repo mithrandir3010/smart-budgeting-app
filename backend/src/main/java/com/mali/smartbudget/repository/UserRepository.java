@@ -25,10 +25,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // ── Admin queries ─────────────────────────────────────────────────────────
 
-    @Query("SELECT u FROM User u WHERE :search IS NULL OR " +
-           "LOWER(u.username) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(u.email)    LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%'))")
+    // CAST(:search AS string) forces Hibernate 6 to bind as VARCHAR, not bytea
+    @Query("SELECT u FROM User u WHERE CAST(:search AS string) IS NULL OR " +
+           "LOWER(u.username) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           "LOWER(u.email)    LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           "LOWER(u.fullName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))")
     Page<User> searchUsers(@Param("search") String search, Pageable pageable);
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.lastLoginAt >= :since")
@@ -36,6 +37,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.createdAt >= :since")
     long countUsersCreatedSince(@Param("since") LocalDateTime since);
+
+    long countByEmailVerifiedTrue();
+
+    @Query("SELECT COUNT(DISTINCT u.id) FROM User u WHERE EXISTS (SELECT 1 FROM Statement s WHERE s.user.id = u.id)")
+    long countUsersWithAnyStatement();
 
     @Query(value = """
             SELECT TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, COUNT(*) AS cnt
