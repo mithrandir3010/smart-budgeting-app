@@ -10,6 +10,7 @@ import com.mali.smartbudget.repository.UserRepository;
 import com.mali.smartbudget.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
@@ -34,6 +35,9 @@ public class AuthService implements UserDetailsService {
     private final EmailVerificationService emailVerificationService;
     private final EmailService emailService;
     private final AuditService auditService;
+
+    @Value("${app.security.email-verification-skip:false}")
+    private boolean emailVerificationSkip;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -75,13 +79,17 @@ public class AuthService implements UserDetailsService {
                 .password(passwordEncoder.encode(request.password()))
                 .fullName(request.fullName())
                 .role("ROLE_USER")
-                .emailVerified(false)
+                .emailVerified(emailVerificationSkip)
                 .build();
 
         userRepository.save(user);
 
-        String token = emailVerificationService.createToken(user);
-        emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), token);
+        if (!emailVerificationSkip) {
+            String token = emailVerificationService.createToken(user);
+            emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), token);
+        } else {
+            log.warn("E-posta doğrulama atlandı (SES sandbox modu): {}", user.getEmail());
+        }
     }
 
     private static final int MAX_FAILED_ATTEMPTS = 5;
