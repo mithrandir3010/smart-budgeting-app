@@ -37,6 +37,12 @@ public class RateLimitingService {
     @Value("${app.rate-limit.upload-monthly-capacity:10}")
     private int uploadMonthlyCapacity;
 
+    @Value("${app.rate-limit.register-capacity:3}")
+    private int registerCapacity;
+
+    @Value("${app.rate-limit.register-refill-hours:1}")
+    private int registerRefillHours;
+
     @Value("${app.rate-limit.api-capacity:60}")
     private int apiCapacity;
 
@@ -44,6 +50,7 @@ public class RateLimitingService {
     private int apiRefillMinutes;
 
     private final Map<String, Bucket> buckets              = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> registerBuckets      = new ConcurrentHashMap<>();
     private final Map<String, Bucket> uploadBuckets        = new ConcurrentHashMap<>();
     private final Map<String, Bucket> uploadMonthlyBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> apiBuckets           = new ConcurrentHashMap<>();
@@ -58,6 +65,20 @@ public class RateLimitingService {
         ConsumptionProbe probe = resolveBucket(ip).tryConsumeAndReturnRemaining(1);
         if (!probe.isConsumed()) {
             persistBlock(key, Duration.ofMinutes(refillMinutes));
+        }
+        return probe;
+    }
+
+    /** Register endpoint'i için IP bazlı sıkı limit — her kayıt bir e-posta tetikler. */
+    @Transactional
+    public ConsumptionProbe tryConsumeRegister(String ip) {
+        String key = "register:" + ip;
+        ConsumptionProbe dbBlock = checkDbBlock(key);
+        if (dbBlock != null) return dbBlock;
+
+        ConsumptionProbe probe = resolveRegisterBucket(ip).tryConsumeAndReturnRemaining(1);
+        if (!probe.isConsumed()) {
+            persistBlock(key, Duration.ofHours(registerRefillHours));
         }
         return probe;
     }
@@ -103,6 +124,7 @@ public class RateLimitingService {
     @Transactional
     public void clearAll() {
         buckets.clear();
+        registerBuckets.clear();
         uploadBuckets.clear();
         uploadMonthlyBuckets.clear();
         apiBuckets.clear();
@@ -134,6 +156,16 @@ public class RateLimitingService {
                         .addLimit(Bandwidth.builder()
                                 .capacity(capacity)
                                 .refillGreedy(capacity, Duration.ofMinutes(refillMinutes))
+                                .build())
+                        .build());
+    }
+
+    private Bucket resolveRegisterBucket(String key) {
+        return registerBuckets.computeIfAbsent(key, k ->
+                Bucket.builder()
+                        .addLimit(Bandwidth.builder()
+                                .capacity(registerCapacity)
+                                .refillGreedy(registerCapacity, Duration.ofHours(registerRefillHours))
                                 .build())
                         .build());
     }

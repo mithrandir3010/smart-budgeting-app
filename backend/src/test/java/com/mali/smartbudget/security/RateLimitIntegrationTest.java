@@ -26,7 +26,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         properties = {
                 "app.rate-limit.enabled=true",
                 "app.rate-limit.capacity=3",
-                "app.rate-limit.refill-minutes=5"
+                "app.rate-limit.refill-minutes=5",
+                "app.rate-limit.register-capacity=3",
+                "app.rate-limit.register-refill-hours=1"
         }
 )
 @AutoConfigureMockMvc

@@ -41,10 +41,16 @@ public class RateLimitingFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
         String ip = resolveClientIp(request);
-        boolean isAuthEndpoint = request.getRequestURI().startsWith("/api/v1/auth/");
-        ConsumptionProbe probe = isAuthEndpoint
-                ? rateLimitingService.tryConsume(ip)
-                : rateLimitingService.tryConsumeApi(ip);
+        String uri = request.getRequestURI();
+        boolean isAuthEndpoint = uri.startsWith("/api/v1/auth/");
+        ConsumptionProbe probe;
+        if ("/api/v1/auth/register".equals(uri)) {
+            probe = rateLimitingService.tryConsumeRegister(ip);
+        } else if (isAuthEndpoint) {
+            probe = rateLimitingService.tryConsume(ip);
+        } else {
+            probe = rateLimitingService.tryConsumeApi(ip);
+        }
 
         if (probe.isConsumed()) {
             response.setHeader("X-RateLimit-Remaining", String.valueOf(probe.getRemainingTokens()));
