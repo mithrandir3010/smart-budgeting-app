@@ -194,10 +194,15 @@ export default function VisionPanel({ variant = 'login' }) {
           style={{ background: 'radial-gradient(circle, rgba(14,165,233,0.1), transparent 70%)' }} />
 
         {/* Brand */}
-        <div className="relative z-10 flex items-center gap-3">
+        <a
+          href="https://smartbudgetr.com/"
+          className="relative z-10 flex items-center gap-3 hover:opacity-80 transition-opacity"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           <BrandMark />
           <span className="text-white font-bold text-xl tracking-tight">Smart Budget</span>
-        </div>
+        </a>
 
         {/* Cards */}
         <div className="relative z-10 flex-1 flex items-center py-8">

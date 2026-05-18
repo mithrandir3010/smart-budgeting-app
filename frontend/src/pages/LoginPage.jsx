@@ -42,10 +42,15 @@ export default function LoginPage() {
         className="flex-1 flex flex-col items-center justify-center px-8 py-16 min-h-screen bg-zinc-50 dark:bg-[#050507]"
       >
         {/* Mobile brand */}
-        <div className="flex lg:hidden items-center gap-2 mb-10">
+        <a
+          href="https://smartbudgetr.com/"
+          className="flex lg:hidden items-center gap-2 mb-10 hover:opacity-80 transition-opacity"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           <BrandMark size={30} />
           <span className="font-bold text-zinc-900 dark:text-zinc-100 text-lg tracking-tight">Smart Budget</span>
-        </div>
+        </a>
 
         <motion.div
           className="w-full max-w-[360px]"

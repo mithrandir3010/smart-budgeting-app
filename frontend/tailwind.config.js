@@ -54,6 +54,10 @@ export default {
         'fade-up':   'fade-up 0.5s ease-out forwards',
         'pulse-dot': 'pulse-dot 2s ease-in-out infinite',
       },
+      spacing: {
+        'header-safe': 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+        'nav-safe':    'calc(4rem + env(safe-area-inset-bottom, 0px))',
+      },
     },
   },
   plugins: [],

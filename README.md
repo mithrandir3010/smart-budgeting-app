@@ -4,6 +4,18 @@
 
 > An intelligent, full-stack platform that transforms raw PDF bank statements into structured financial insights. Upload your statement, and Smart Budget automatically extracts, categorizes, and visualizes every transaction — powered by a hybrid AI pipeline engineered to minimize cost without sacrificing accuracy.
 
+**Live:** [smartbudgetr.com](https://smartbudgetr.com)
+
+<br>
+
+## 📸 Screenshots
+
+![Smart Budget — Hero](docs/screenshots/hero.png)
+
+![Smart Budget — How It Works](docs/screenshots/how-it-works.png)
+
+![Smart Budget — Features](docs/screenshots/features.png)
+
 <br>
 
 ## ✨ Features at a Glance
@@ -119,10 +131,11 @@ The backend exposes a **Model Context Protocol (MCP)** server (`/mcp` endpoint) 
 
 | Component | Technology |
 |---|---|
-| Database | PostgreSQL 15 |
+| Database | PostgreSQL 15 (AWS RDS) |
 | Containerization | Docker, Docker Compose |
-| Backend Hosting | Railway |
-| Frontend Hosting | Vercel |
+| Backend Hosting | AWS ECS Fargate (ECR + Application Load Balancer) |
+| Frontend Hosting | AWS S3 + CloudFront |
+| Email | AWS SES |
 
 <br>
 
@@ -184,46 +197,60 @@ The UI will be available at `http://localhost:5173`.
 
 <br>
 
-## ☁️ Deployment (Railway + Vercel)
+## ☁️ Deployment (AWS)
 
-The project is deployment-ready with full environment isolation.
+The production environment runs entirely on AWS (eu-north-1).
 
-### Backend — Railway
-
-Set the following environment variables in the Railway dashboard:
-
-| Variable | Value |
+| Resource | Detail |
 |---|---|
-| `SPRING_PROFILES_ACTIVE` | `prod` |
-| `JWT_SECRET` | Generate: `openssl rand -base64 32` |
-| `OPENAI_API_KEY` | `sk-...` |
-| `ALLOWED_ORIGINS` | `https://<your-vercel-domain>.vercel.app` |
-| `SECURE_COOKIE` | `true` |
-| `DB_URL` | Use Railway's **internal** PostgreSQL URL (`jdbc:postgresql://postgres.railway.internal:5432/railway`) |
-| `DB_USERNAME` | `postgres` |
-| `DB_PASSWORD` | Provided by Railway automatically |
+| Backend | ECS Fargate — `smart-budget-cluster / smart-budget-task-service` |
+| Container Registry | ECR — `smart-budget-backend:latest` |
+| Database | RDS PostgreSQL 15 |
+| Frontend | S3 bucket + CloudFront distribution |
+| Email | SES (eu-north-1) |
 
-> **Health Check Path:** Set `/health` in Railway Settings → Health Check Path.
-
-The `application-prod.properties` profile activates automatically when `SPRING_PROFILES_ACTIVE=prod` is set, disabling SQL logging and switching DDL to `validate`.
-
-### Frontend — Vercel
-
-| Variable | Value |
-|---|---|
-| `VITE_API_URL` | `https://<your-railway-domain>.up.railway.app` |
-
-### Deploy order
-
-1. Deploy Railway (backend + database)
-2. Deploy Vercel (frontend)
-3. Update `ALLOWED_ORIGINS` in Railway with the final Vercel domain
-
-### Building for Railway locally (Apple Silicon)
+### Backend deploy
 
 ```bash
-docker build --platform linux/amd64 -t smart-budget-backend .
+# 1. Build JAR
+cd backend && mvn package -DskipTests
+
+# 2. Build & push image (must use linux/amd64 — Apple Silicon produces ARM otherwise)
+docker buildx build --platform linux/amd64 \
+  -t 537997492075.dkr.ecr.eu-north-1.amazonaws.com/smart-budget-backend:latest \
+  --push .
+
+# 3. Register new task definition revision, then:
+aws ecs update-service \
+  --cluster smart-budget-cluster \
+  --service smart-budget-task-service \
+  --task-definition smart-budget-task:<rev> \
+  --force-new-deployment \
+  --region eu-north-1
 ```
+
+### Frontend deploy
+
+```bash
+cd frontend && npm run build
+aws s3 sync dist/ s3://smartbudgetr-frontend/ --delete --region eu-north-1
+aws cloudfront create-invalidation \
+  --distribution-id E98MRPRKF7PFY \
+  --paths "/*" \
+  --region eu-north-1
+```
+
+### Key environment variables (ECS Task Definition)
+
+| Variable | Purpose |
+|---|---|
+| `SPRING_PROFILES_ACTIVE` | `prod` |
+| `JWT_SECRET` | `openssl rand -base64 32` |
+| `OPENAI_API_KEY` | `sk-...` |
+| `ALLOWED_ORIGINS` | `https://smartbudgetr.com` |
+| `SECURE_COOKIE` | `true` |
+| `DB_URL` | RDS JDBC URL |
+| `AWS_SES_REGION` | `eu-north-1` |
 
 <br>
 
