@@ -611,7 +611,8 @@ public class ExtractionService {
         pipelineSw.stop();
         log.info("[pipeline] Extraction tamamlandı. {} DTO | banka={} | toplam süre={}ms",
                 allDtos.size(), bankType, pipelineSw.getTotalTimeMillis());
-        return new ExtractionResult(allDtos, bankType == BankType.UNKNOWN ? null : bankType.name());
+        String headerText = rawText.substring(0, Math.min(500, rawText.length()));
+        return new ExtractionResult(allDtos, bankType == BankType.UNKNOWN ? null : bankType.name(), headerText);
     }
 
     /** Geriye dönük uyumluluk için — sadece DTO listesine ihtiyaç duyulduğunda. */
@@ -929,7 +930,7 @@ public class ExtractionService {
     // Banka Tipi Tespiti
     // ─────────────────────────────────────────────────────────────────────────
 
-    private enum BankType { HALKBANK, ISBANK, YAPIKREDI, UNKNOWN }
+    private enum BankType { HALKBANK, ISBANK, YAPIKREDI, GARANTI, AKBANK, ZIRAAT, DENIZBANK, VAKIFBANK, FINANSBANK, TEB, UNKNOWN }
 
     private BankType detectBankType(String text) {
         if (text.contains("HALKBANK") || text.contains("paraf.com.tr")
@@ -938,6 +939,16 @@ public class ExtractionService {
                 || text.contains("MAXIPUAN"))                                  return BankType.ISBANK;
         if (text.contains("YAPI ve KREDİ BANKASI") || text.contains("worldcard.com.tr")
                 || text.contains("WORLDPUAN"))                                 return BankType.YAPIKREDI;
+        if (text.contains("Garanti BBVA") || text.contains("garanti.com.tr")
+                || text.contains("BONUS KREDİ KARTI"))                        return BankType.GARANTI;
+        if (text.contains("AKBANK") || text.contains("axess.com.tr"))         return BankType.AKBANK;
+        if (text.contains("ZİRAAT BANKASI") || text.contains("ziraatbank.com.tr")
+                || text.contains("BANKKART"))                                  return BankType.ZIRAAT;
+        if (text.contains("DENİZBANK") || text.contains("denizbank.com.tr")) return BankType.DENIZBANK;
+        if (text.contains("VAKIFBANK") || text.contains("vakifbank.com.tr")) return BankType.VAKIFBANK;
+        if (text.contains("FİNANSBANK") || text.contains("CardFinans")
+                || text.contains("finansbank.com.tr"))                         return BankType.FINANSBANK;
+        if (text.contains("TÜRK EKONOMİ BANKASI") || text.contains("teb.com.tr")) return BankType.TEB;
         return BankType.UNKNOWN;
     }
 

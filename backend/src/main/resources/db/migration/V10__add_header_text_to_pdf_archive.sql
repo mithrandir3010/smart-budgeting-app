@@ -1,0 +1,1 @@
+ALTER TABLE pdf_archive ADD COLUMN IF NOT EXISTS header_text TEXT;

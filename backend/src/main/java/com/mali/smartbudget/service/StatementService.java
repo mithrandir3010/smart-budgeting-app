@@ -2,6 +2,7 @@ package com.mali.smartbudget.service;
 
 import com.mali.smartbudget.dto.ExtractionResult;
 import com.mali.smartbudget.dto.TransactionDto;
+import com.mali.smartbudget.dto.UploadResponseDto;
 import com.mali.smartbudget.exception.DuplicateStatementException;
 import com.mali.smartbudget.model.PdfArchive;
 import com.mali.smartbudget.model.Statement;
@@ -72,7 +73,7 @@ public class StatementService {
      * @throws EntityNotFoundException      Kullanıcı bulunamazsa (→ 404)
      */
     @Transactional
-    public String processUpload(MultipartFile file, Long userId, String fileName) throws IOException {
+    public UploadResponseDto processUpload(MultipartFile file, Long userId, String fileName) throws IOException {
 
         StopWatch uploadSw = new StopWatch("processUpload");
         uploadSw.start("total");
@@ -96,7 +97,8 @@ public class StatementService {
         log.info("[Upload 3/6] Extraction başlıyor (saf I/O)...");
         ExtractionResult extraction = extractionService.extractAll(file);
         List<TransactionDto> dtos = extraction.dtos();
-        String bankName = extraction.bankName();
+        String bankName   = extraction.bankName();
+        String headerText = extraction.headerText();
         log.info("[Upload 3/6] {} DTO ayıklandı. banka={}", dtos.size(), bankName);
 
         // ── Adım 4: Dönem hesaplama ───────────────────────────────────────────
@@ -172,6 +174,7 @@ public class StatementService {
                 .bankName(bankName)
                 .uploadDate(LocalDate.now())
                 .pdfContent(bytes)
+                .headerText(headerText)
                 .build());
         log.info("[Upload 6/6] PDF arşivlendi (anonim).");
 
@@ -185,7 +188,7 @@ public class StatementService {
         if (periodStart.isPresent()) {
             msg += " (%s – %s dönemi)".formatted(periodStart.get(), periodEnd.get());
         }
-        return msg + ".";
+        return new UploadResponseDto(msg + ".", bankName);
     }
 
     /**

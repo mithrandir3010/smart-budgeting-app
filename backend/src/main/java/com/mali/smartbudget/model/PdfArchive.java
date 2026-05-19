@@ -28,4 +28,7 @@ public class PdfArchive {
 
     @Column(name = "pdf_content", columnDefinition = "bytea", nullable = false)
     private byte[] pdfContent;
+
+    @Column(name = "header_text", columnDefinition = "TEXT")
+    private String headerText;
 }

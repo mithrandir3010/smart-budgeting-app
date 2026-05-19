@@ -55,10 +55,17 @@ function fillGrowthData(data) {
 }
 
 const BANK_LABELS = {
-  HALKBANK:  { label: 'Halkbank',    color: '#10b981' },
-  ISBANK:    { label: 'İş Bankası',  color: '#6366f1' },
-  YAPIKREDI: { label: 'Yapı Kredi',  color: '#f59e0b' },
-  UNKNOWN:   { label: 'Bilinmiyor',  color: '#71717a' },
+  HALKBANK:   { label: 'Halkbank',       color: '#10b981' },
+  ISBANK:     { label: 'İş Bankası',     color: '#6366f1' },
+  YAPIKREDI:  { label: 'Yapı Kredi',     color: '#f59e0b' },
+  GARANTI:    { label: 'Garanti BBVA',   color: '#3b82f6' },
+  AKBANK:     { label: 'Akbank',         color: '#ef4444' },
+  ZIRAAT:     { label: 'Ziraat Bankası', color: '#22c55e' },
+  DENIZBANK:  { label: 'Denizbank',      color: '#06b6d4' },
+  VAKIFBANK:  { label: 'Vakıfbank',      color: '#a855f7' },
+  FINANSBANK: { label: 'QNB Finansbank', color: '#f97316' },
+  TEB:        { label: 'TEB',            color: '#14b8a6' },
+  UNKNOWN:    { label: 'Bilinmiyor',     color: '#71717a' },
 };
 
 // ── Audit config ───────────────────────────────────────────────────────────────
@@ -221,10 +228,19 @@ function BankChart({ data }) {
       <div className="space-y-3">
         {data.map((item) => {
           const cfg = BANK_LABELS[item.bankName] || { label: item.bankName, color: '#71717a' };
+          const supported = SUPPORTED_BANKS.includes(item.bankName);
           return (
             <div key={item.bankName}>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{cfg.label}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{cfg.label}</span>
+                  {!supported && item.bankName !== 'UNKNOWN' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">parser yok</span>
+                  )}
+                  {item.bankName === 'UNKNOWN' && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-500/10 text-zinc-500 font-medium">tanımlanamadı</span>
+                  )}
+                </div>
                 <span className="text-xs text-zinc-500">{item.count} ekstre · %{item.percentage}</span>
               </div>
               <div className="h-2 w-full rounded-full bg-zinc-100 dark:bg-white/[0.06]">

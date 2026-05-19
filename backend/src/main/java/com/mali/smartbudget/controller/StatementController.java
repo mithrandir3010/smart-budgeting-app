@@ -1,5 +1,6 @@
 package com.mali.smartbudget.controller;
 
+import com.mali.smartbudget.dto.UploadResponseDto;
 import com.mali.smartbudget.model.User;
 import com.mali.smartbudget.service.RateLimitingService;
 import com.mali.smartbudget.service.StatementService;
@@ -49,7 +50,7 @@ public class StatementController {
      * </pre>
      */
     @PostMapping("/upload")
-    public ResponseEntity<String> upload(
+    public ResponseEntity<?> upload(
             @RequestParam("file") MultipartFile file,
             @AuthenticationPrincipal User currentUser) throws IOException {
 
@@ -89,10 +90,11 @@ public class StatementController {
         log.info("Ekstre yükleme isteği. userId={}, username={}, dosya='{}', boyut={} byte",
                 currentUser.getId(), currentUser.getUsername(), fileName, file.getSize());
 
-        String message = statementService.processUpload(file, currentUser.getId(), fileName);
-        log.info("Yükleme tamamlandı. userId={}, sonuç='{}'", currentUser.getId(), message);
+        UploadResponseDto result = statementService.processUpload(file, currentUser.getId(), fileName);
+        log.info("Yükleme tamamlandı. userId={}, banka={}, sonuç='{}'",
+                currentUser.getId(), result.bankName(), result.message());
 
-        return ResponseEntity.ok(message);
+        return ResponseEntity.ok(result);
     }
 
     /**

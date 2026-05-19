@@ -11,6 +11,17 @@ import { BrandMark } from '../components/auth/VisionPanel';
 import { useTheme } from '../context/ThemeContext';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+const SUPPORTED_BANKS = ['HALKBANK', 'ISBANK', 'YAPIKREDI'];
+const RECOGNIZED_BANKS = {
+  GARANTI:   'Garanti BBVA',
+  AKBANK:    'Akbank',
+  ZIRAAT:    'Ziraat Bankası',
+  DENIZBANK: 'Denizbank',
+  VAKIFBANK: 'Vakıfbank',
+  FINANSBANK: 'QNB Finansbank',
+  TEB:       'TEB',
+};
+
 const LOADING_STEPS = [
   'PDF okunuyor...',
   'İşlemler analiz ediliyor...',
@@ -197,9 +208,13 @@ export default function UploadPage() {
 
     try {
       const res = await uploadStatement(file);
-      const msg = typeof res.data === 'string' ? res.data : 'Ekstre başarıyla yüklendi.';
+      const data = res.data;
+      const msg     = data?.message ?? (typeof data === 'string' ? data : 'Ekstre başarıyla yüklendi.');
+      const bank    = data?.bankName ?? null;
+      const isUnsupported = bank && !SUPPORTED_BANKS.includes(bank);
+      const isUnknown     = !bank;
       toast.success(msg);
-      setStatus({ type: 'success', message: msg });
+      setStatus({ type: 'success', message: msg, bankName: bank, isUnsupported, isUnknown });
       setFile(null);
       if (inputRef.current) inputRef.current.value = '';
     } catch (err) {
@@ -390,6 +405,16 @@ export default function UploadPage() {
                     <Icon size={16} className={`${cfg.text} flex-shrink-0 mt-0.5`} />
                     <div className="flex-1">
                       <p className={`${cfg.text} font-medium leading-snug`}>{status.message}</p>
+                      {status.type === 'success' && status.isUnsupported && (
+                        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 leading-relaxed">
+                          ⚠️ {RECOGNIZED_BANKS[status.bankName] || status.bankName} henüz tam desteklenmiyor. İşlemler otomatik tahmin edildi — lütfen gözden geçirin.
+                        </p>
+                      )}
+                      {status.type === 'success' && status.isUnknown && (
+                        <p className="mt-2 text-xs text-orange-600 dark:text-orange-400 leading-relaxed">
+                          ⚠️ Banka formatı tanınamadı. İşlemler tahmin edilerek çıkarıldı — dikkatli kontrol edin.
+                        </p>
+                      )}
                       {status.type === 'success' && countdown !== null && (
                         <div className="flex items-center justify-between gap-3 mt-2.5">
                           <span className="text-xs text-zinc-500">

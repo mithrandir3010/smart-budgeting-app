@@ -2,6 +2,7 @@ package com.mali.smartbudget.controller;
 
 import com.mali.smartbudget.config.PasswordEncoderConfig;
 import com.mali.smartbudget.config.SecurityConfig;
+import com.mali.smartbudget.dto.UploadResponseDto;
 import com.mali.smartbudget.exception.DuplicateStatementException;
 import com.mali.smartbudget.model.User;
 import com.mali.smartbudget.security.JwtAuthenticationFilter;
@@ -98,7 +99,7 @@ class StatementControllerTest {
     @DisplayName("200 OK — Geçerli auth + PDF → başarı mesajı döner")
     void upload_authenticatedUser_validFile_returns200() throws Exception {
         when(statementService.processUpload(any(), eq(1L), any()))
-                .thenReturn("3 işlem başarıyla işlendi (2026-04-01 – 2026-04-30 dönemi).");
+                .thenReturn(new UploadResponseDto("3 işlem başarıyla işlendi (2026-04-01 – 2026-04-30 dönemi).", "HALKBANK"));
 
         mockMvc.perform(multipart(UPLOAD_URL)
                         .file(pdfFile("ekstre.pdf", "PDF içeriği"))
@@ -110,7 +111,7 @@ class StatementControllerTest {
     @Test
     @DisplayName("userId, SecurityContext'ten (principal) alınır — request parametresinden ALINMAZ")
     void upload_userId_comesFromSecurityContext_notFromRequestParam() throws Exception {
-        when(statementService.processUpload(any(), anyLong(), any())).thenReturn("OK");
+        when(statementService.processUpload(any(), anyLong(), any())).thenReturn(new UploadResponseDto("OK", null));
 
         mockMvc.perform(multipart(UPLOAD_URL)
                         .file(pdfFile("ekstre.pdf", "PDF"))
@@ -124,7 +125,7 @@ class StatementControllerTest {
     @DisplayName("Orijinal dosya adı processUpload'a aktarılır")
     void upload_originalFilename_passedToService() throws Exception {
         when(statementService.processUpload(any(), anyLong(), eq("mayis-2026.pdf")))
-                .thenReturn("Başarılı");
+                .thenReturn(new UploadResponseDto("Başarılı", "ISBANK"));
 
         mockMvc.perform(multipart(UPLOAD_URL)
                         .file(pdfFile("mayis-2026.pdf", "içerik"))
