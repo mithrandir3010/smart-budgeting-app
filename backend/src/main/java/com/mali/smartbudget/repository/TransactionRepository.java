@@ -37,4 +37,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     @Query(value = "SELECT COALESCE(SUM(t.amount), 0) FROM transactions t WHERE t.user_id = :userId AND EXTRACT(YEAR FROM t.date) = :year AND EXTRACT(MONTH FROM t.date) = :month", nativeQuery = true)
     BigDecimal findMonthlyTotal(@Param("userId") Long userId, @Param("year") int year, @Param("month") int month);
+
+    @Query(value = "SELECT COUNT(DISTINCT DATE_TRUNC('month', date)) FROM transactions WHERE user_id = :userId", nativeQuery = true)
+    long countDistinctMonths(@Param("userId") Long userId);
 }

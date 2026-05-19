@@ -67,8 +67,11 @@ public class AnalyticsService {
                     userId, totalSpending, monthlyBudget);
         }
 
-        // Günlük hız: toplam harcama / 30 (standart ekstre süresi)
-        BigDecimal dailyRate = computeDailyRate(totalSpending, 30);
+        // Günlük hız: toplam harcama / (aktif ay sayısı × 30)
+        // Harcamasız aylar ve aynı aya ait birden fazla kart doğru işlenir.
+        long distinctMonths = transactionRepository.countDistinctMonths(userId);
+        int statementDays = (int) Math.max(1, distinctMonths) * 30;
+        BigDecimal dailyRate = computeDailyRate(totalSpending, statementDays);
         BigDecimal projectedSpending = dailyRate.multiply(BigDecimal.valueOf(30))
                 .setScale(2, RoundingMode.HALF_UP);
 
