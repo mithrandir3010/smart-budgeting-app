@@ -4,8 +4,9 @@ import { fmt } from '../../utils/helpers';
 const MONTH_LABELS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
 
 function tabLabel(s) {
-  if (s.statementCutDate) {
-    const d = new Date(s.statementCutDate);
+  const raw = s.statementCutDate || s.periodEnd;
+  if (raw) {
+    const d = new Date(raw);
     return `${d.getDate()} ${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
   }
   return s.fileName.replace(/\.pdf$/i, '');

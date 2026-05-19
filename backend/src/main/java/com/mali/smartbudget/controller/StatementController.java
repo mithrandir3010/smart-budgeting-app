@@ -55,7 +55,8 @@ public class StatementController {
                     BigDecimal total = transactionRepository.findTotalByStatementId(s.getId());
                     return new StatementInfoDto(
                             s.getId(), s.getFileName(), s.getBankName(),
-                            s.getStatementCutDate(), s.getUploadDate(), total);
+                            s.getStatementCutDate(), s.getPeriodEnd(),
+                            s.getUploadDate(), total);
                 })
                 .toList();
         return ResponseEntity.ok(dtos);

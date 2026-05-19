@@ -8,6 +8,7 @@ public record StatementInfoDto(
         String fileName,
         String bankName,
         LocalDate statementCutDate,
+        LocalDate periodEnd,
         LocalDate uploadDate,
         BigDecimal totalAmount
 ) {}
