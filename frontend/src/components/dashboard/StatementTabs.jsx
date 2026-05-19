@@ -6,11 +6,7 @@ const MONTH_LABELS = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 
 function tabLabel(s) {
   if (s.statementCutDate) {
     const d = new Date(s.statementCutDate);
-    return `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
-  }
-  if (s.uploadDate) {
-    const d = new Date(s.uploadDate);
-    return `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+    return `${d.getDate()} ${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
   }
   return s.fileName.replace(/\.pdf$/i, '');
 }
