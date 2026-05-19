@@ -30,23 +30,27 @@ public class AnalyticsService {
     private final BudgetLimitService    budgetLimitService;
     private final UserRepository        userRepository;
 
+    @Transactional(readOnly = true)
+    public AnalyticsSummaryDto getSummary(Long userId) {
+        return getSummary(userId, null);
+    }
+
     /**
      * Kullanıcının toplam harcamasını, kategori bazlı dökümünü, AI koçluk
      * tavsiyesini ve bütçe uyarılarını hesaplar.
      *
-     * <p>Kullanıcının {@code monthlyBudget} alanı null ise bütçe karşılaştırması
-     * yapılmaz; sadece harcama özeti ve genel koçluk tavsiyesi döner.
-     *
-     * @param userId Analiz edilecek kullanıcının ID'si
+     * @param userId      Analiz edilecek kullanıcının ID'si
+     * @param statementId Belirli bir ekstreye filtrelemek için; null ise tüm ekstreler
      */
     @Transactional(readOnly = true)
-    public AnalyticsSummaryDto getSummary(Long userId) {
-        // Kullanıcının opsiyonel aylık bütçe hedefini çek
+    public AnalyticsSummaryDto getSummary(Long userId, Long statementId) {
         BigDecimal monthlyBudget = userRepository.findById(userId)
                 .map(com.mali.smartbudget.model.User::getMonthlyBudget)
                 .orElse(null);
 
-        List<Object[]> rows = transactionRepository.findCategoryTotals(userId);
+        List<Object[]> rows = statementId != null
+                ? transactionRepository.findCategoryTotalsByStatementId(statementId)
+                : transactionRepository.findCategoryTotals(userId);
 
         Map<String, BigDecimal> categoryBreakdown = new LinkedHashMap<>();
         BigDecimal totalSpending = BigDecimal.ZERO;
@@ -58,18 +62,17 @@ public class AnalyticsService {
             totalSpending = totalSpending.add(total);
         }
 
-        // Bütçe aşım uyarısı — yalnızca kullanıcı bir limit belirlediyse
+        // Bütçe aşım uyarısı — ekstre bazlı görünümde gösterilmez
         String warning = null;
-        if (monthlyBudget != null && totalSpending.compareTo(monthlyBudget) > 0) {
+        if (statementId == null && monthlyBudget != null && totalSpending.compareTo(monthlyBudget) > 0) {
             warning = "Dikkat: Aylık harcamanız %.2f TL ile %s limitini aştı!"
                     .formatted(totalSpending, formatBudget(monthlyBudget));
             log.warn("Kullanıcı {} aylık limiti aştı: {} TL (limit: {} TL)",
                     userId, totalSpending, monthlyBudget);
         }
 
-        // Günlük hız: toplam harcama / (aktif ay sayısı × 30)
-        // Harcamasız aylar ve aynı aya ait birden fazla kart doğru işlenir.
-        long distinctMonths = transactionRepository.countDistinctMonths(userId);
+        // Tek ekstre = 1 ay = 30 gün; genel özette gerçek ay sayısı kullanılır
+        long distinctMonths = statementId != null ? 1L : transactionRepository.countDistinctMonths(userId);
         int statementDays = (int) Math.max(1, distinctMonths) * 30;
         BigDecimal dailyRate = computeDailyRate(totalSpending, statementDays);
         BigDecimal projectedSpending = dailyRate.multiply(BigDecimal.valueOf(30))
@@ -77,10 +80,13 @@ public class AnalyticsService {
 
         String coachAdvice = buildCoachAdvice(totalSpending, categoryBreakdown, monthlyBudget);
 
-        List<BudgetAlertDto> alerts = budgetLimitService.computeAlerts(userId, categoryBreakdown);
+        // Bütçe uyarıları kullanıcı genelinde hesaplanır (ekstre bazlı değil)
+        List<BudgetAlertDto> alerts = statementId == null
+                ? budgetLimitService.computeAlerts(userId, categoryBreakdown)
+                : List.of();
 
-        log.info("Analiz tamamlandı. userId={}, toplam={} TL, tahmin={} TL, bütçe={}, alert={}",
-                userId, totalSpending, projectedSpending, monthlyBudget, alerts.size());
+        log.info("Analiz tamamlandı. userId={}, statementId={}, toplam={} TL, tahmin={} TL",
+                userId, statementId, totalSpending, projectedSpending);
 
         return new AnalyticsSummaryDto(
                 totalSpending, categoryBreakdown, warning,

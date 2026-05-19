@@ -40,4 +40,10 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     @Query(value = "SELECT COUNT(DISTINCT DATE_TRUNC('month', date)) FROM transactions WHERE user_id = :userId", nativeQuery = true)
     long countDistinctMonths(@Param("userId") Long userId);
+
+    @Query("SELECT t.category, SUM(t.amount) FROM Transaction t WHERE t.statement.id = :statementId GROUP BY t.category")
+    List<Object[]> findCategoryTotalsByStatementId(@Param("statementId") Long statementId);
+
+    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t WHERE t.statement.id = :statementId")
+    BigDecimal findTotalByStatementId(@Param("statementId") Long statementId);
 }

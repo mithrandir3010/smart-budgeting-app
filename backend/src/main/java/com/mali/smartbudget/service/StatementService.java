@@ -215,4 +215,12 @@ public class StatementService {
         auditService.statementDeleted(userId);
         log.info("Tüm veriler silindi (transaction + statement + budget limits). userId={}", userId);
     }
+
+    @Transactional(readOnly = true)
+    public List<Statement> getProcessedStatements(Long userId) {
+        return statementRepository.findByUserIdAndStatus(userId, StatementStatus.PROCESSED)
+                .stream()
+                .sorted(Comparator.comparing(Statement::getUploadDate))
+                .toList();
+    }
 }

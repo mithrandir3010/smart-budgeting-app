@@ -97,11 +97,14 @@ export const resetPassword = (token, newPassword, confirmPassword) =>
   client.post('/api/v1/auth/reset-password', { token, newPassword, confirmPassword });
 
 // ── Analytics ─────────────────────────────────────────────────────────────────
-export const getAnalyticsSummary = () =>
-  client.get('/api/v1/analytics/summary');
+export const getAnalyticsSummary = (statementId = null) =>
+  client.get('/api/v1/analytics/summary', { params: statementId ? { statementId } : {} });
 
 export const getTransactions = () =>
   client.get('/api/v1/analytics/transactions');
+
+export const getStatements = () =>
+  client.get('/api/v1/statements');
 
 export const getSubscriptions = () =>
   client.get('/api/v1/analytics/subscriptions');

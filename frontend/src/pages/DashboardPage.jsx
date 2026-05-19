@@ -5,22 +5,25 @@ import { Upload, AlertTriangle } from 'lucide-react';
 import {
   getAnalyticsSummary, getTransactions, getBudgetAlerts,
   updateMonthlyBudget, deleteAllStatements, getStoredUser, getPublicSettings,
+  getStatements,
 } from '../api/client';
 import { Megaphone, X as XIcon } from 'lucide-react';
 import { generateReport } from '../utils/pdfReport';
 
-import AppLayout          from '../components/layout/AppLayout';
-import BentoCards         from '../components/dashboard/BentoCards';
-import DonutChart         from '../components/dashboard/DonutChart';
-import SpendingTrendChart from '../components/dashboard/SpendingTrendChart';
-import TransactionsTable  from '../components/TransactionsTable';
-import SerenaInsightCard  from '../components/SerenaInsightCard';
-import CoachCard          from '../components/CoachCard';
-import SubscriptionCard   from '../components/SubscriptionCard';
-import BudgetGuard        from '../components/BudgetGuard';
-import BudgetLimitModal   from '../components/BudgetLimitModal';
-import InstallmentCard    from '../components/InstallmentCard';
-import { fadeUp, GlassCard } from '../components/shared';
+import AppLayout               from '../components/layout/AppLayout';
+import BentoCards              from '../components/dashboard/BentoCards';
+import DonutChart              from '../components/dashboard/DonutChart';
+import SpendingTrendChart      from '../components/dashboard/SpendingTrendChart';
+import StatementTabs           from '../components/dashboard/StatementTabs';
+import StatementComparisonBar  from '../components/dashboard/StatementComparisonBar';
+import TransactionsTable       from '../components/TransactionsTable';
+import SerenaInsightCard       from '../components/SerenaInsightCard';
+import CoachCard               from '../components/CoachCard';
+import SubscriptionCard        from '../components/SubscriptionCard';
+import BudgetGuard             from '../components/BudgetGuard';
+import BudgetLimitModal        from '../components/BudgetLimitModal';
+import InstallmentCard         from '../components/InstallmentCard';
+import { fadeUp, GlassCard }   from '../components/shared';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const TODAY = new Date().toLocaleDateString('tr-TR', {
@@ -101,15 +104,19 @@ export default function DashboardPage() {
   const location    = useLocation();
   const currentUser = getStoredUser();
 
-  const [summary,        setSummary]        = useState(null);
-  const [transactions,   setTransactions]   = useState([]);
-  const [alerts,         setAlerts]         = useState([]);
-  const [loading,        setLoading]        = useState(true);
-  const [error,          setError]          = useState(null);
-  const [showLimitModal, setShowLimitModal] = useState(false);
-  const [pdfLoading,     setPdfLoading]     = useState(false);
-  const [announcement,   setAnnouncement]   = useState('');
-  const [annDismissed,   setAnnDismissed]   = useState(false);
+  const [summary,             setSummary]             = useState(null);
+  const [transactions,        setTransactions]        = useState([]);
+  const [alerts,              setAlerts]              = useState([]);
+  const [loading,             setLoading]             = useState(true);
+  const [error,               setError]               = useState(null);
+  const [showLimitModal,      setShowLimitModal]      = useState(false);
+  const [pdfLoading,          setPdfLoading]          = useState(false);
+  const [announcement,        setAnnouncement]        = useState('');
+  const [annDismissed,        setAnnDismissed]        = useState(false);
+  const [statements,          setStatements]          = useState([]);
+  const [selectedStatementId, setSelectedStatementId] = useState(null);
+  const [tabSummary,          setTabSummary]          = useState(null);
+  const [tabLoading,          setTabLoading]          = useState(false);
 
   const handleDownloadPdf = async () => {
     if (!summary) return;
@@ -128,6 +135,20 @@ export default function DashboardPage() {
     catch { /* non-critical */ }
   };
 
+  const handleSelectStatement = async (statementId) => {
+    setSelectedStatementId(statementId);
+    if (statementId === null) {
+      setTabSummary(null);
+      return;
+    }
+    setTabLoading(true);
+    try {
+      const res = await getAnalyticsSummary(statementId);
+      setTabSummary(res.data);
+    } catch { setTabSummary(null); }
+    finally { setTabLoading(false); }
+  };
+
   const handleBudgetSet = async (amount) => {
     await updateMonthlyBudget(amount);
     await Promise.all([fetchSummary(), fetchAlerts()]);
@@ -137,7 +158,8 @@ export default function DashboardPage() {
     if (!window.confirm('Tüm işlemler ve ekstre kayıtları kalıcı olarak silinecek. Emin misiniz?')) return;
     try {
       await deleteAllStatements();
-      setSummary(null); setTransactions([]); setAlerts([]); setLoading(true);
+      setSummary(null); setTransactions([]); setAlerts([]);
+      setStatements([]); setSelectedStatementId(null); setTabSummary(null); setLoading(true);
       const [summaryRes, txRes] = await Promise.all([getAnalyticsSummary(), getTransactions()]);
       setSummary(summaryRes.data); setTransactions(txRes.data);
     } catch { /* toast handled by client */ }
@@ -145,9 +167,14 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    setSummary(null); setTransactions([]); setAlerts([]); setError(null); setLoading(true);
-    Promise.all([getAnalyticsSummary(), getTransactions()])
-      .then(([s, t]) => { setSummary(s.data); setTransactions(t.data); })
+    setSummary(null); setTransactions([]); setAlerts([]); setError(null);
+    setSelectedStatementId(null); setTabSummary(null); setLoading(true);
+    Promise.all([getAnalyticsSummary(), getTransactions(), getStatements()])
+      .then(([s, t, st]) => {
+        setSummary(s.data);
+        setTransactions(t.data);
+        setStatements(st.data || []);
+      })
       .catch(() => setError('Veriler yüklenirken bir hata oluştu.'))
       .finally(() => setLoading(false));
     fetchAlerts();
@@ -238,27 +265,51 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* ── Stat cards ── */}
+      {/* ── Stat cards — her zaman genel toplam ── */}
       <motion.div {...fadeUp(0.1)}>
         <SectionLabel>Genel Bakış</SectionLabel>
         <BentoCards summary={summary} transactions={transactions} />
       </motion.div>
 
-      {/* ── Charts ── */}
+      {/* ── Ekstre tab seçici ── */}
+      {statements.length >= 2 && (
+        <motion.div {...fadeUp(0.18)} className="mt-5">
+          <StatementTabs
+            statements={statements}
+            selectedId={selectedStatementId}
+            onSelect={handleSelectStatement}
+          />
+        </motion.div>
+      )}
+
+      {/* ── Analitik — tab seçimine göre değişir ── */}
       <motion.div {...fadeUp(0.25)} className="mt-6">
         <SectionLabel>Analitik</SectionLabel>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <DonutChart categoryBreakdown={summary.categoryBreakdown} />
-          <SpendingTrendChart transactions={transactions} />
-        </div>
+        {tabLoading ? (
+          <div className="h-64 rounded-2xl bg-white/[0.04] animate-pulse" />
+        ) : selectedStatementId !== null ? (
+          /* Tek ekstre modu: sadece donut, trend chart tek ay için anlamsız */
+          <div className="grid grid-cols-1 gap-4">
+            <DonutChart categoryBreakdown={tabSummary?.categoryBreakdown ?? {}} />
+          </div>
+        ) : (
+          /* Genel Analiz modu */
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <DonutChart categoryBreakdown={summary.categoryBreakdown} />
+              <SpendingTrendChart transactions={transactions} />
+            </div>
+            <StatementComparisonBar statements={statements} />
+          </div>
+        )}
       </motion.div>
 
-      {/* ── AI ── */}
+      {/* ── AI — tab seçimine göre değişir ── */}
       <motion.div {...fadeUp(0.38)} className="mt-6">
         <SectionLabel>Yapay Zeka</SectionLabel>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SerenaInsightCard summary={summary} />
-          <CoachCard summary={summary} onBudgetSet={handleBudgetSet} />
+          <SerenaInsightCard summary={selectedStatementId !== null ? (tabSummary ?? summary) : summary} />
+          <CoachCard summary={selectedStatementId !== null ? (tabSummary ?? summary) : summary} onBudgetSet={handleBudgetSet} />
         </div>
       </motion.div>
 
@@ -268,18 +319,32 @@ export default function DashboardPage() {
         <SubscriptionCard />
       </motion.div>
 
-      {/* ── Transactions ── */}
+      {/* ── Transactions — ekstre seçiliyse filtrele ── */}
       <motion.div {...fadeUp(0.55)} className="mt-6">
-        <SectionLabel>Tüm İşlemler</SectionLabel>
+        <SectionLabel>
+          {selectedStatementId !== null ? 'Bu Ekstreye Ait İşlemler' : 'Tüm İşlemler'}
+        </SectionLabel>
         <GlassCard>
-          <TransactionsTable transactions={transactions} />
+          <TransactionsTable
+            transactions={
+              selectedStatementId !== null
+                ? transactions.filter((t) => t.statementId === selectedStatementId)
+                : transactions
+            }
+          />
         </GlassCard>
       </motion.div>
 
       {/* ── Installments ── */}
       <motion.div {...fadeUp(0.62)} className="mt-6 mb-4">
         <SectionLabel>Taksitler</SectionLabel>
-        <InstallmentCard transactions={transactions} />
+        <InstallmentCard
+          transactions={
+            selectedStatementId !== null
+              ? transactions.filter((t) => t.statementId === selectedStatementId)
+              : transactions
+          }
+        />
       </motion.div>
 
     </AppLayout>

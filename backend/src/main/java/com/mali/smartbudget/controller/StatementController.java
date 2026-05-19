@@ -1,7 +1,10 @@
 package com.mali.smartbudget.controller;
 
+import com.mali.smartbudget.dto.StatementInfoDto;
 import com.mali.smartbudget.dto.UploadResponseDto;
+import com.mali.smartbudget.model.Statement;
 import com.mali.smartbudget.model.User;
+import com.mali.smartbudget.repository.TransactionRepository;
 import com.mali.smartbudget.service.RateLimitingService;
 import com.mali.smartbudget.service.StatementService;
 import io.github.bucket4j.ConsumptionProbe;
@@ -11,11 +14,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.math.BigDecimal;
+import java.util.List;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,8 +43,23 @@ public class StatementController {
 
     private static final byte[] PDF_MAGIC = {'%', 'P', 'D', 'F'};
 
-    private final StatementService    statementService;
-    private final RateLimitingService rateLimitingService;
+    private final StatementService      statementService;
+    private final RateLimitingService   rateLimitingService;
+    private final TransactionRepository transactionRepository;
+
+    @GetMapping
+    public ResponseEntity<List<StatementInfoDto>> list(@AuthenticationPrincipal User currentUser) {
+        List<Statement> statements = statementService.getProcessedStatements(currentUser.getId());
+        List<StatementInfoDto> dtos = statements.stream()
+                .map(s -> {
+                    BigDecimal total = transactionRepository.findTotalByStatementId(s.getId());
+                    return new StatementInfoDto(
+                            s.getId(), s.getFileName(), s.getBankName(),
+                            s.getStatementCutDate(), s.getUploadDate(), total);
+                })
+                .toList();
+        return ResponseEntity.ok(dtos);
+    }
 
     /**
      * PDF ekstre yükler, mükerrerlik kontrolü yapar ve harcamaları kaydeder.

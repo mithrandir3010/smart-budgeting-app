@@ -2,7 +2,7 @@ package com.mali.smartbudget.controller;
 
 import com.mali.smartbudget.dto.AnalyticsSummaryDto;
 import com.mali.smartbudget.dto.SubscriptionSummaryDto;
-import com.mali.smartbudget.dto.TransactionDto;
+import com.mali.smartbudget.dto.TransactionResponseDto;
 import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.model.User;
 import com.mali.smartbudget.service.AnalyticsService;
@@ -13,11 +13,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @RestController
@@ -29,17 +29,23 @@ public class AnalyticsController {
     private final TransactionService transactionService;
 
     @GetMapping("/summary")
-    public ResponseEntity<AnalyticsSummaryDto> getSummary(@AuthenticationPrincipal User currentUser) {
-        log.info("Analiz isteği alındı. userId={}, username={}", currentUser.getId(), currentUser.getUsername());
-        return ResponseEntity.ok(analyticsService.getSummary(currentUser.getId()));
+    public ResponseEntity<AnalyticsSummaryDto> getSummary(
+            @AuthenticationPrincipal User currentUser,
+            @RequestParam(required = false) Long statementId) {
+        log.info("Analiz isteği alındı. userId={}, statementId={}", currentUser.getId(), statementId);
+        return ResponseEntity.ok(analyticsService.getSummary(currentUser.getId(), statementId));
     }
 
     @GetMapping("/transactions")
-    public ResponseEntity<List<TransactionDto>> getTransactions(@AuthenticationPrincipal User currentUser) {
+    public ResponseEntity<List<TransactionResponseDto>> getTransactions(@AuthenticationPrincipal User currentUser) {
         log.info("İşlem listesi isteği alındı. userId={}", currentUser.getId());
-        List<TransactionDto> dtos = transactionService.getTransactionsByUser(currentUser.getId())
+        List<TransactionResponseDto> dtos = transactionService.getTransactionsByUser(currentUser.getId())
                 .stream()
-                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency(), t.isSubscription(), t.isInstallment(), t.getCurrentInstallment(), t.getTotalInstallments(), t.getCategoryEnum()))
+                .map(t -> new TransactionResponseDto(
+                        t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(),
+                        t.getCurrency(), t.isSubscription(), t.isInstallment(),
+                        t.getCurrentInstallment(), t.getTotalInstallments(), t.getCategoryEnum(),
+                        t.getStatement() != null ? t.getStatement().getId() : null))
                 .toList();
         return ResponseEntity.ok(dtos);
     }
@@ -50,7 +56,6 @@ public class AnalyticsController {
 
         List<Transaction> all = transactionService.getSubscriptionsByUser(currentUser.getId());
 
-        // description bazlı gruplama (case-insensitive): en son ödenen tutar + kaç aydır tespit edildiği
         List<SubscriptionSummaryDto> summaries = all.stream()
                 .collect(java.util.stream.Collectors.groupingBy(
                         t -> t.getDescription().toLowerCase(java.util.Locale.ROOT)))
