@@ -73,9 +73,23 @@ public class Statement {
     /**
      * Tespit edilen banka adı (BankType.name()).
      * Nullable: banka tespit edilemezse veya eski kayıtlar için null olabilir.
-     * Dönem çakışma kontrolünde: aynı banka + aynı dönem → mükerrer.
      */
     @Column(name = "bank_name", length = 50)
     private String bankName;
+
+    /**
+     * PDF'ten çıkarılan maskeli kart numarası (Örn: "5430-81##-####-4437").
+     * Nullable: bilinmeyen format veya kart numarası bulunamazsa null.
+     * Mükerrer kontrolünde: bankName + maskedCardNo + statementCutDate üçlüsü kullanılır.
+     */
+    @Column(name = "masked_card_no", length = 30)
+    private String maskedCardNo;
+
+    /**
+     * PDF başlığından çıkarılan hesap kesim tarihi.
+     * Nullable: bilinmeyen format veya tarih bulunamazsa null.
+     */
+    @Column(name = "statement_cut_date")
+    private LocalDate statementCutDate;
 
 }

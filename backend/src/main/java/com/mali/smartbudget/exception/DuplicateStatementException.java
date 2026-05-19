@@ -17,7 +17,7 @@ import java.time.LocalDate;
 public class DuplicateStatementException extends RuntimeException {
 
     /** Mükerrerlik tipi — frontend'in mesajı özelleştirmesi için. */
-    public enum Type { HASH, PERIOD }
+    public enum Type { HASH, PERIOD, CARD_PERIOD }
 
     private final Type duplicateType;
     private final LocalDate periodStart;

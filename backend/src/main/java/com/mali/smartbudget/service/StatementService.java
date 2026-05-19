@@ -96,10 +96,13 @@ public class StatementService {
         // ── Adım 3: PDF ayıklama — saf I/O, DB'ye hiçbir şey yazılmıyor ──────
         log.info("[Upload 3/6] Extraction başlıyor (saf I/O)...");
         ExtractionResult extraction = extractionService.extractAll(file);
-        List<TransactionDto> dtos = extraction.dtos();
-        String bankName   = extraction.bankName();
-        String headerText = extraction.headerText();
-        log.info("[Upload 3/6] {} DTO ayıklandı. banka={}", dtos.size(), bankName);
+        List<TransactionDto> dtos      = extraction.dtos();
+        String bankName                = extraction.bankName();
+        String headerText              = extraction.headerText();
+        String maskedCardNo            = extraction.maskedCardNo();
+        java.time.LocalDate cutDate    = extraction.statementCutDate();
+        log.info("[Upload 3/6] {} DTO ayıklandı. banka={} | kart={} | kesim={}",
+                dtos.size(), bankName, maskedCardNo, cutDate);
 
         // ── Adım 4: Dönem hesaplama ───────────────────────────────────────────
         Optional<LocalDate> periodStart = dtos.stream()
@@ -115,23 +118,26 @@ public class StatementService {
             log.warn("[Upload 4/6] İşlem tarihi bulunamadı — dönem boş.");
         }
 
-        // ── Adım 5: Dönem çakışma kontrolü ───────────────────────────────────
-        if (periodStart.isPresent() && periodEnd.isPresent()) {
-            long conflictCount = statementRepository.countOverlappingPeriods(
-                    userId, periodStart.get(), periodEnd.get(), bankName);
-
-            if (conflictCount > 0) {
-                log.warn("[Upload 5/6] DÖNEM ÇAKIŞMASI — userId={}, dönem={} – {}, çakışan kayıt={}",
-                        userId, periodStart.get(), periodEnd.get(), conflictCount);
+        // ── Adım 5: Kart parmak izi mükerrerlik kontrolü ─────────────────────
+        // maskedCardNo + statementCutDate + bankName üçü de mevcutsa tam eşleşme kontrolü.
+        // Herhangi biri null ise bu kontrol atlanır — hash koruması yeterli kabul edilir.
+        if (maskedCardNo != null && cutDate != null && bankName != null) {
+            boolean exists = statementRepository.existsByCardFingerprint(
+                    userId, bankName, maskedCardNo, cutDate);
+            if (exists) {
+                log.warn("[Upload 5/6] KART MÜKERRERİ — userId={}, banka={}, kart={}, kesim={}",
+                        userId, bankName, maskedCardNo, cutDate);
                 throw new DuplicateStatementException(
-                        "Bu ekstre dönemi zaten kayıtlı! %s – %s aralığını kapsayan bir ekstre mevcut."
-                                .formatted(periodStart.get(), periodEnd.get()),
-                        DuplicateStatementException.Type.PERIOD,
-                        periodStart.get(), periodEnd.get()
+                        "Bu karta ait ekstre zaten yüklü! (%s · Kesim: %s)"
+                                .formatted(maskedCardNo, cutDate),
+                        DuplicateStatementException.Type.CARD_PERIOD,
+                        cutDate, cutDate
                 );
             }
+        } else {
+            log.info("[Upload 5/6] Kart parmak izi eksik (kart={} kesim={}) — mükerrer kontrolü atlandı.",
+                    maskedCardNo, cutDate);
         }
-        log.info("[Upload 5/6] Dönem kontrolü geçildi.");
 
         // ── Adım 6: Statement kaydet → transaction'ları statement referansıyla ekle ──
         User user = userRepository.findById(userId)
@@ -145,6 +151,8 @@ public class StatementService {
                 .periodStart(periodStart.orElse(null))
                 .periodEnd(periodEnd.orElse(null))
                 .bankName(bankName)
+                .maskedCardNo(maskedCardNo)
+                .statementCutDate(cutDate)
                 .status(StatementStatus.PROCESSED)
                 .build();
         statementRepository.save(statement);

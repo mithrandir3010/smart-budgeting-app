@@ -276,6 +276,24 @@ public class ExtractionService {
             "^0?\\d\\.Taksit\\s"
     );
 
+    /**
+     * Maskeli kart numarası — 16 haneli, aralarında '-' veya boşluk, bazı haneler '#' veya '*' ile maskelenmiş.
+     * Örn: "5430-81##-####-4437", "5430 81** **** 4437"
+     */
+    private static final Pattern MASKED_CARD_NO = Pattern.compile(
+            "\\b(\\d{4})[-\\s]([0-9#*]{4})[-\\s]([0-9#*]{4})[-\\s](\\d{4})\\b"
+    );
+
+    /**
+     * Hesap kesim tarihi — çeşitli Türk bankası ekstre başlık formatları.
+     * Örn: "Hesap Kesim Tarihi: 31.03.2026", "EKSTRE TARİHİ  31/03/2026"
+     */
+    private static final Pattern STATEMENT_CUT_DATE = Pattern.compile(
+            "(?:hesap\\s+kesim\\s+tarihi|ekstre\\s+tarihi|kesim\\s+tarihi)" +
+            "\\s*[:\\.]?\\s*(\\d{2}[./\\-]\\d{2}[./\\-]\\d{4})",
+            Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
+    );
+
     private static final Map<String, Integer> TURKISH_MONTHS = Map.ofEntries(
             Map.entry("ocak", 1),   Map.entry("şubat", 2),  Map.entry("mart", 3),
             Map.entry("nisan", 4),  Map.entry("mayıs", 5),  Map.entry("haziran", 6),
@@ -611,8 +629,11 @@ public class ExtractionService {
         pipelineSw.stop();
         log.info("[pipeline] Extraction tamamlandı. {} DTO | banka={} | toplam süre={}ms",
                 allDtos.size(), bankType, pipelineSw.getTotalTimeMillis());
-        String headerText = rawText.substring(0, Math.min(500, rawText.length()));
-        return new ExtractionResult(allDtos, bankType == BankType.UNKNOWN ? null : bankType.name(), headerText);
+        String headerText       = rawText.substring(0, Math.min(500, rawText.length()));
+        String maskedCardNo     = extractMaskedCardNo(rawText);
+        java.time.LocalDate cutDate = extractStatementCutDate(rawText);
+        log.info("[pipeline] Kart parmak izi: maskedCardNo={} | kesimTarihi={}", maskedCardNo, cutDate);
+        return new ExtractionResult(allDtos, bankType == BankType.UNKNOWN ? null : bankType.name(), headerText, maskedCardNo, cutDate);
     }
 
     /** Geriye dönük uyumluluk için — sadece DTO listesine ihtiyaç duyulduğunda. */
@@ -1183,6 +1204,28 @@ public class ExtractionService {
                 || SLASH_DATE_LINE.matcher(line).find()
                 || line.matches("^\\d{4}[-/]\\d{2}[-/]\\d{2}.*")
                 || line.matches("^\\d{1,2}[./]\\d{1,2}[./]\\d{4}.*");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Kart parmak izi extraction
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** Maskeli kart numarasını raw PDF metninden çıkarır. Separatörler '-' olarak normalize edilir. */
+    private String extractMaskedCardNo(String rawText) {
+        java.util.regex.Matcher m = MASKED_CARD_NO.matcher(rawText);
+        if (!m.find()) return null;
+        return m.group(1) + "-" + m.group(2) + "-" + m.group(3) + "-" + m.group(4);
+    }
+
+    /** Hesap kesim tarihini raw PDF metninden çıkarır. */
+    private java.time.LocalDate extractStatementCutDate(String rawText) {
+        java.util.regex.Matcher m = STATEMENT_CUT_DATE.matcher(rawText);
+        if (!m.find()) return null;
+        String raw = m.group(1);
+        for (DateTimeFormatter fmt : DATE_FORMATTERS) {
+            try { return java.time.LocalDate.parse(raw, fmt); } catch (DateTimeParseException ignored) {}
+        }
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -81,18 +81,23 @@ public interface StatementRepository extends JpaRepository<Statement, Long> {
             """, nativeQuery = true)
     java.util.List<Object[]> findFailedStatements();
 
+    /**
+     * Aynı kart parmak izi (banka + maskeli kart no + kesim tarihi) ile
+     * daha önce yüklenmiş bir PROCESSED ekstre var mı?
+     *
+     * <p>Üç alan da non-null olduğunda çağrılır. Bu kontrol dönem aralığı
+     * karşılaştırmasının yerine geçer: aynı kart + aynı kesim tarihi = aynı ekstre.
+     */
     @Query("""
-            SELECT COUNT(s) FROM Statement s
-            WHERE s.user.id      = :userId
-              AND s.status       = com.mali.smartbudget.model.StatementStatus.PROCESSED
-              AND s.periodStart  IS NOT NULL
-              AND s.periodEnd    IS NOT NULL
-              AND s.periodStart  <= :periodEnd
-              AND s.periodEnd    >= :periodStart
-              AND (:bankName IS NULL OR s.bankName IS NULL OR s.bankName = :bankName)
+            SELECT COUNT(s) > 0 FROM Statement s
+            WHERE s.user.id           = :userId
+              AND s.status            = com.mali.smartbudget.model.StatementStatus.PROCESSED
+              AND s.bankName          = :bankName
+              AND s.maskedCardNo      = :maskedCardNo
+              AND s.statementCutDate  = :statementCutDate
             """)
-    long countOverlappingPeriods(@Param("userId") Long userId,
-                                 @Param("periodStart") LocalDate periodStart,
-                                 @Param("periodEnd") LocalDate periodEnd,
-                                 @Param("bankName") String bankName);
+    boolean existsByCardFingerprint(@Param("userId") Long userId,
+                                    @Param("bankName") String bankName,
+                                    @Param("maskedCardNo") String maskedCardNo,
+                                    @Param("statementCutDate") LocalDate statementCutDate);
 }
