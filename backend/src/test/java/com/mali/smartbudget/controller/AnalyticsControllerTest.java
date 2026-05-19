@@ -99,7 +99,7 @@ class AnalyticsControllerTest {
     @Test
     @DisplayName("200 OK — Limitin altında, uyarısız özet döner")
     void getSummary_underLimit_returns200WithNoWarning() throws Exception {
-        when(analyticsService.getSummary(1L)).thenReturn(
+        when(analyticsService.getSummary(1L, null)).thenReturn(
                 dto(new BigDecimal("6100.00"),
                     Map.of("Kira", new BigDecimal("5000.00"), "Market", new BigDecimal("1100.00")),
                     null, "Harika gidiyorsun!")
@@ -117,7 +117,7 @@ class AnalyticsControllerTest {
     @Test
     @DisplayName("200 OK — Limit aşılınca uyarı ve koçluk tavsiyesi dolu gelir")
     void getSummary_overLimit_returns200WithWarningAndAdvice() throws Exception {
-        when(analyticsService.getSummary(1L)).thenReturn(
+        when(analyticsService.getSummary(1L, null)).thenReturn(
                 dto(new BigDecimal("12500.00"),
                     Map.of("Kira", new BigDecimal("12000.00"), "Market", new BigDecimal("500.00")),
                     "Dikkat: Aylık harcamanız 12500,00 TL ile 10.000 TL limitini aştı!",
@@ -133,7 +133,7 @@ class AnalyticsControllerTest {
     @Test
     @DisplayName("200 OK — Hiç işlem yoksa sıfır toplam, boş breakdown döner")
     void getSummary_noTransactions_returns200WithZeroTotal() throws Exception {
-        when(analyticsService.getSummary(1L)).thenReturn(
+        when(analyticsService.getSummary(1L, null)).thenReturn(
                 dto(BigDecimal.ZERO, Map.of(), null, "Henüz veri yok.")
         );
 
@@ -148,14 +148,14 @@ class AnalyticsControllerTest {
     @Test
     @DisplayName("userId'nin principal'dan geldiği doğrulanır — request parametresinden alınmaz")
     void getSummary_userId_comesFromPrincipal() throws Exception {
-        when(analyticsService.getSummary(1L)).thenReturn(
+        when(analyticsService.getSummary(1L, null)).thenReturn(
                 dto(BigDecimal.ZERO, Map.of(), null, "OK")
         );
 
         mockMvc.perform(get(SUMMARY_URL).with(authentication(auth)))
                 .andExpect(status().isOk());
 
-        org.mockito.Mockito.verify(analyticsService).getSummary(1L);
+        org.mockito.Mockito.verify(analyticsService).getSummary(1L, null);
     }
 
     // =========================================================================

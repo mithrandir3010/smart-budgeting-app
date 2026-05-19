@@ -62,6 +62,7 @@ class StatementControllerTest {
     @MockBean private UserDetailsService userDetailsService;
     @MockBean private com.mali.smartbudget.service.RateLimitingService rateLimitingService;
     @MockBean private com.mali.smartbudget.service.SystemSettingService systemSettingService;
+    @MockBean private com.mali.smartbudget.repository.TransactionRepository transactionRepository;
 
     private User testUser;
     private UsernamePasswordAuthenticationToken auth;
