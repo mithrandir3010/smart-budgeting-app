@@ -50,9 +50,10 @@ public class AnalyticsController {
 
         List<Transaction> all = transactionService.getSubscriptionsByUser(currentUser.getId());
 
-        // description bazlı gruplama: en son ödenen tutar + kaç aydır tespit edildiği
+        // description bazlı gruplama (case-insensitive): en son ödenen tutar + kaç aydır tespit edildiği
         List<SubscriptionSummaryDto> summaries = all.stream()
-                .collect(java.util.stream.Collectors.groupingBy(Transaction::getDescription))
+                .collect(java.util.stream.Collectors.groupingBy(
+                        t -> t.getDescription().toLowerCase(java.util.Locale.ROOT)))
                 .entrySet().stream()
                 .map(e -> {
                     List<Transaction> group = e.getValue();
