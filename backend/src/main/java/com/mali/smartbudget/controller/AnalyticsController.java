@@ -1,7 +1,9 @@
 package com.mali.smartbudget.controller;
 
 import com.mali.smartbudget.dto.AnalyticsSummaryDto;
+import com.mali.smartbudget.dto.SubscriptionSummaryDto;
 import com.mali.smartbudget.dto.TransactionDto;
+import com.mali.smartbudget.model.Transaction;
 import com.mali.smartbudget.model.User;
 import com.mali.smartbudget.service.AnalyticsService;
 import com.mali.smartbudget.service.TransactionService;
@@ -13,7 +15,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -41,12 +45,34 @@ public class AnalyticsController {
     }
 
     @GetMapping("/subscriptions")
-    public ResponseEntity<List<TransactionDto>> getSubscriptions(@AuthenticationPrincipal User currentUser) {
+    public ResponseEntity<List<SubscriptionSummaryDto>> getSubscriptions(@AuthenticationPrincipal User currentUser) {
         log.info("Abonelik listesi isteği alındı. userId={}", currentUser.getId());
-        List<TransactionDto> dtos = transactionService.getSubscriptionsByUser(currentUser.getId())
-                .stream()
-                .map(t -> new TransactionDto(t.getDate(), t.getDescription(), t.getAmount(), t.getCategory(), t.getCurrency(), t.isSubscription(), t.isInstallment(), t.getCurrentInstallment(), t.getTotalInstallments(), t.getCategoryEnum()))
+
+        List<Transaction> all = transactionService.getSubscriptionsByUser(currentUser.getId());
+
+        // description bazlı gruplama: en son ödenen tutar + kaç aydır tespit edildiği
+        List<SubscriptionSummaryDto> summaries = all.stream()
+                .collect(java.util.stream.Collectors.groupingBy(Transaction::getDescription))
+                .entrySet().stream()
+                .map(e -> {
+                    List<Transaction> group = e.getValue();
+                    Transaction latest = group.stream()
+                            .max(Comparator.comparing(Transaction::getDate))
+                            .orElseThrow();
+                    long distinctMonths = group.stream()
+                            .map(t -> t.getDate().withDayOfMonth(1))
+                            .distinct()
+                            .count();
+                    return new SubscriptionSummaryDto(
+                            latest.getDescription(),
+                            latest.getCategory(),
+                            latest.getAmount(),
+                            (int) distinctMonths);
+                })
+                .sorted(Comparator.comparing(SubscriptionSummaryDto::latestAmount).reversed())
                 .toList();
-        return ResponseEntity.ok(dtos);
+
+        log.info("Abonelik özeti: {} tekil abonelik ({} toplam kayıt)", summaries.size(), all.size());
+        return ResponseEntity.ok(summaries);
     }
 }

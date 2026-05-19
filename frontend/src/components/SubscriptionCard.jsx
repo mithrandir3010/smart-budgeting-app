@@ -47,7 +47,7 @@ export default function SubscriptionCard() {
   }, []);
 
   const monthlyTotal = subscriptions.reduce(
-    (sum, s) => sum + parseFloat(s.amount || 0),
+    (sum, s) => sum + parseFloat(s.latestAmount || s.amount || 0),
     0
   );
 
@@ -122,13 +122,20 @@ export default function SubscriptionCard() {
                   <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
                     {sub.description}
                   </p>
-                  {sub.category && (
-                    <p className="text-xs text-zinc-400 dark:text-zinc-500">{sub.category}</p>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    {sub.category && (
+                      <p className="text-xs text-zinc-400 dark:text-zinc-500">{sub.category}</p>
+                    )}
+                    {sub.monthCount > 1 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 font-medium">
+                        {sub.monthCount} aydır
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300 whitespace-nowrap tabular-nums">
-                {formatTRY(sub.amount)}
+                {formatTRY(sub.latestAmount ?? sub.amount)}
               </p>
             </div>
           ))}
