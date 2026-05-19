@@ -105,7 +105,8 @@ class StatementControllerTest {
                         .file(pdfFile("ekstre.pdf", "PDF içeriği"))
                         .with(authentication(auth)))
                 .andExpect(status().isOk())
-                .andExpect(content().string(containsString("3 işlem")));
+                .andExpect(jsonPath("$.message", containsString("3 i")))
+                .andExpect(jsonPath("$.bankName").value("HALKBANK"));
     }
 
     @Test
